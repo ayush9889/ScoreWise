@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RotateCcw, RefreshCw, Camera } from 'lucide-react';
 import { Match, Player, Ball, WicketType } from '../types/cricket';
 import { PlayerSelector } from './PlayerSelector';
+import { authService } from '../services/authService';
 
 interface ScoringPanelProps {
   match: Match;
@@ -217,6 +218,8 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
     setExtraRuns(0);
   };
 
+  const currentGroup = authService.getCurrentGroup();
+
   return (
     <>
       <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -415,6 +418,8 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
           onClose={() => setShowPlayerSelector(null)}
           players={getPlayersForSelector(showPlayerSelector.type)}
           excludePlayerIds={getExcludedPlayerIds(showPlayerSelector.type)}
+          allowAddPlayer={true}
+          groupId={currentGroup?.id}
         />
       )}
 

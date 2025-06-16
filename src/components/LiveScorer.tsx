@@ -10,6 +10,7 @@ import { LiveScoreboard } from './LiveScoreboard';
 import { ScorecardModal } from './ScorecardModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cloudStorageService } from '../services/cloudStorageService';
+import { authService } from '../services/authService';
 
 interface LiveScorerProps {
   match: Match;
@@ -373,6 +374,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     setShowAddPlayerModal(false);
   };
 
+  const currentGroup = authService.getCurrentGroup();
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -387,16 +390,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         <h1 className="font-bold text-base text-gray-900">Live Scorer</h1>
         
         <div className="flex items-center space-x-2">
-          <button
-            onClick={() => {
-              setAddPlayerType('batting');
-              setShowAddPlayerModal(true);
-            }}
-            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Add Player"
-          >
-            <UserPlus className="w-5 h-5 text-gray-600" />
-          </button>
           <button
             onClick={() => setShowScorecard(true)}
             className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
@@ -522,6 +515,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
             b.id !== match.previousBowler?.id
           )}
           showOnlyAvailable={true}
+          allowAddPlayer={true}
+          groupId={currentGroup?.id}
         />
       )}
 
@@ -533,6 +528,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           onClose={() => setShowNewBatsmanSelector(false)}
           players={match.battingTeam.players}
           showOnlyAvailable={true}
+          allowAddPlayer={true}
+          groupId={currentGroup?.id}
         />
       )}
 
@@ -567,6 +564,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           onClose={() => setShowMotmSelector(false)}
           players={[...match.team1.players, ...match.team2.players]}
           showOnlyAvailable={false}
+          allowAddPlayer={false}
         />
       )}
 
@@ -578,6 +576,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           onClose={() => setShowAddPlayerModal(false)}
           players={allPlayers}
           showOnlyAvailable={false}
+          allowAddPlayer={true}
+          groupId={currentGroup?.id}
         />
       )}
 
@@ -689,6 +689,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
                       onClose={() => setShowMatchSummary(false)}
                       players={[...match.battingTeam.players, ...match.bowlingTeam.players]}
                       showOnlyAvailable={false}
+                      allowAddPlayer={false}
                     />
                   </div>
                 )}
@@ -704,6 +705,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
             onClose={() => setShowBatsmanSelector(false)}
             players={match.battingTeam.players}
             showOnlyAvailable={true}
+            allowAddPlayer={true}
+            groupId={currentGroup?.id}
           />
         )}
 
@@ -714,6 +717,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
             onClose={() => setShowBowlerSelector(false)}
             players={match.bowlingTeam.players}
             showOnlyAvailable={true}
+            allowAddPlayer={true}
+            groupId={currentGroup?.id}
           />
         )}
       </AnimatePresence>

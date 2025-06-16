@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Share2, Settings, Crown, UserPlus, Copy, Check } from 'lucide-react';
+import { Users, Plus, Share2, Settings, Crown, UserPlus, Copy, Check, Phone, Mail } from 'lucide-react';
 import { Group, User } from '../types/auth';
+import { Player } from '../types/cricket';
 import { authService } from '../services/authService';
+import { storageService } from '../services/storage';
 
 interface GroupManagementProps {
   onBack: () => void;
@@ -13,11 +15,14 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showJoinGroup, setShowJoinGroup] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddPhone, setQuickAddPhone] = useState('');
   const [guestLink, setGuestLink] = useState('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -91,10 +96,67 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
       setShowInviteModal(false);
       setInviteEmail('');
       setInvitePhone('');
-      // In a real app, show success message
       alert('Invitation sent successfully!');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send invitation');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickAddPlayer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentGroup || !quickAddName.trim()) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      // Create player
+      const player: Player = {
+        id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: quickAddName.trim(),
+        isGroupMember: true,
+        stats: {
+          matchesPlayed: 0,
+          runsScored: 0,
+          ballsFaced: 0,
+          fours: 0,
+          sixes: 0,
+          fifties: 0,
+          hundreds: 0,
+          highestScore: 0,
+          timesOut: 0,
+          wicketsTaken: 0,
+          ballsBowled: 0,
+          runsConceded: 0,
+          catches: 0,
+          runOuts: 0,
+          motmAwards: 0,
+          ducks: 0,
+          dotBalls: 0,
+          maidenOvers: 0,
+          bestBowlingFigures: '0/0'
+        }
+      };
+
+      await storageService.savePlayer(player);
+
+      // Send invitation if phone number provided
+      if (quickAddPhone.trim()) {
+        try {
+          await authService.inviteToGroup(currentGroup.id, undefined, quickAddPhone.trim());
+        } catch (inviteError) {
+          console.warn('Failed to send invitation:', inviteError);
+        }
+      }
+
+      setShowQuickAddModal(false);
+      setQuickAddName('');
+      setQuickAddPhone('');
+      alert(`Player "${player.name}" added successfully!${quickAddPhone ? ' Invitation sent via SMS.' : ''}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add player');
     } finally {
       setLoading(false);
     }
@@ -192,21 +254,32 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => setShowInviteModal(true)}
+                    onClick={() => setShowQuickAddModal(true)}
                     className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition-colors"
                   >
                     <UserPlus className="w-6 h-6 text-green-600 mx-auto mb-2" />
-                    <div className="text-sm font-medium text-green-700">Invite Members</div>
+                    <div className="text-sm font-medium text-green-700">Quick Add Player</div>
+                    <div className="text-xs text-green-600">Add by phone number</div>
                   </button>
 
                   <button
-                    onClick={() => copyToClipboard(guestLink)}
+                    onClick={() => setShowInviteModal(true)}
                     className="p-4 border-2 border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
                   >
-                    <Share2 className="w-6 h-6 text-blue-600 mx-auto mb-2" />
-                    <div className="text-sm font-medium text-blue-700">Share Guest Link</div>
+                    <Mail className="w-6 h-6 text-blue-600 mx-auto mb-2" />
+                    <div className="text-sm font-medium text-blue-700">Send Invitation</div>
+                    <div className="text-xs text-blue-600">Email or SMS invite</div>
                   </button>
                 </div>
+
+                <button
+                  onClick={() => copyToClipboard(guestLink)}
+                  className="w-full mt-4 p-4 border-2 border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
+                >
+                  <Share2 className="w-6 h-6 text-purple-600 mx-auto mb-2" />
+                  <div className="text-sm font-medium text-purple-700">Share Guest Link</div>
+                  <div className="text-xs text-purple-600">View-only access for non-members</div>
+                </button>
               </div>
             )}
 
@@ -412,7 +485,7 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-md">
             <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Invite Member</h2>
+              <h2 className="text-xl font-bold text-gray-900">Send Invitation</h2>
             </div>
             <form onSubmit={handleInviteMember} className="p-6 space-y-4">
               {error && (
@@ -425,26 +498,32 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address
                 </label>
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Enter email address"
-                />
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter email address"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Phone Number (Alternative)
                 </label>
-                <input
-                  type="tel"
-                  value={invitePhone}
-                  onChange={(e) => setInvitePhone(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  placeholder="Enter phone number"
-                />
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={invitePhone}
+                    onChange={(e) => setInvitePhone(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter phone number"
+                  />
+                </div>
               </div>
 
               <p className="text-sm text-gray-600">
@@ -465,6 +544,75 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                 >
                   {loading ? 'Sending...' : 'Send Invitation'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Player Modal */}
+      {showQuickAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Quick Add Player</h2>
+              <p className="text-sm text-gray-600 mt-1">Add a player and optionally invite them via SMS</p>
+            </div>
+            <form onSubmit={handleQuickAddPlayer} className="p-6 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-700 text-sm">{error}</p>
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Player Name *
+                </label>
+                <input
+                  type="text"
+                  value={quickAddName}
+                  onChange={(e) => setQuickAddName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="Enter player's name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone Number (Optional)
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={quickAddPhone}
+                    onChange={(e) => setQuickAddPhone(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter phone number for invitation"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  If provided, we'll send them an invitation to join the group
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickAddModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || !quickAddName.trim()}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Adding...' : 'Add Player'}
                 </button>
               </div>
             </form>
