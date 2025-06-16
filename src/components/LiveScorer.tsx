@@ -182,6 +182,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   };
 
   const handleInningsTransition = () => {
+    console.log('Innings transition triggered');
     // Only show innings break if first innings is actually complete
     if (isFirstInningsComplete()) {
       setShowInningsBreak(true);
@@ -189,6 +190,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   };
 
   const handleInningsBreakContinue = () => {
+    console.log('Starting second innings setup');
     const updatedMatch = { ...match };
     updatedMatch.isSecondInnings = true;
     
@@ -325,12 +327,14 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         // Check if innings is complete
         if (updatedMatch.battingTeam.overs >= match.totalOvers) {
           if (!updatedMatch.isSecondInnings) {
+            setMatch(updatedMatch);
             handleInningsTransition();
+            return;
           } else {
             handleMatchComplete();
+            setMatch(updatedMatch);
+            return;
           }
-          setMatch(updatedMatch);
-          return;
         }
         
         // Force bowler change after over completion
@@ -341,7 +345,9 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     // Check for innings completion
     if (CricketEngine.isInningsComplete(updatedMatch)) {
       if (!updatedMatch.isSecondInnings) {
+        setMatch(updatedMatch);
         handleInningsTransition();
+        return;
       } else {
         handleMatchComplete();
       }
@@ -479,11 +485,11 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       )}
 
       {/* Floating Innings Transition Button */}
-      {isFirstInningsComplete() && !showInningsBreak && (
+      {isFirstInningsComplete() && !showInningsBreak && !showInningsSetup && (
         <motion.div
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-40"
+          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50"
         >
           <button
             onClick={handleInningsTransition}
@@ -530,7 +536,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           </div>
         )}
         
-        {/* Enhanced Live Stats Bars */}
+        {/* Enhanced Live Stats Bars - Show when players are selected */}
         {match.currentStriker && match.currentNonStriker && match.currentBowler && (
           <div className="space-y-3">
             <LiveStatsBar 
@@ -553,14 +559,43 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           </div>
         )}
         
-        <ScoringPanel
-          match={match}
-          onScoreUpdate={handleScoreUpdate}
-          onUndo={handleUndo}
-          canUndo={actionHistory.length > 0}
-          pendingStrikeRotation={pendingStrikeRotation}
-          onStrikeRotation={handleStrikeRotation}
-        />
+        {/* Show player selection prompt if players not selected */}
+        {(!match.currentStriker || !match.currentNonStriker || !match.currentBowler) && (
+          <div className="glass-effect rounded-2xl shadow-lg p-6 text-center">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 font-display">Setup Required</h3>
+            <p className="text-gray-600 mb-4">Please select players to start scoring</p>
+            <div className="space-y-3">
+              {!match.currentStriker && (
+                <button
+                  onClick={() => setShowBatsmanSelector(true)}
+                  className="w-full gradient-primary text-white py-3 px-4 rounded-xl font-semibold"
+                >
+                  Select Opening Batsmen
+                </button>
+              )}
+              {match.currentStriker && match.currentNonStriker && !match.currentBowler && (
+                <button
+                  onClick={() => setShowBowlerSelector(true)}
+                  className="w-full gradient-secondary text-white py-3 px-4 rounded-xl font-semibold"
+                >
+                  Select Opening Bowler
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Only show scoring panel when all players are selected */}
+        {match.currentStriker && match.currentNonStriker && match.currentBowler && (
+          <ScoringPanel
+            match={match}
+            onScoreUpdate={handleScoreUpdate}
+            onUndo={handleUndo}
+            canUndo={actionHistory.length > 0}
+            pendingStrikeRotation={pendingStrikeRotation}
+            onStrikeRotation={handleStrikeRotation}
+          />
+        )}
 
         {/* Recent Balls */}
         {match.balls.length > 0 && (
