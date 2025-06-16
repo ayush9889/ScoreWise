@@ -116,9 +116,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       } catch (error) {
         console.error('Error loading match from cloud:', error);
         // Don't show error to user for permission issues - just continue with local data
-        if (error instanceof Error && !error.message.includes('permission')) {
-          setSaveError('Failed to load match from cloud storage. Using local data.');
-        }
       }
     };
     loadMatch();
@@ -140,13 +137,26 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       } catch (error) {
         console.error('Error saving match to cloud:', error);
         
-        // Don't show permission errors to user - just log them
-        if (error instanceof Error && error.message.includes('permission')) {
+        // Check if it's a permission error - don't show to user, just log
+        if (error instanceof Error && 
+            (error.message.includes('permission') || 
+             error.message.includes('Missing or insufficient permissions'))) {
           console.log('Permission denied for cloud save - continuing in offline mode');
+          // Don't set saveError for permission issues
           return;
         }
         
-        setSaveError(error instanceof Error ? error.message : 'Failed to save match to cloud storage');
+        // Check if it's a network error
+        if (error instanceof Error && 
+            (error.message.includes('unavailable') || 
+             error.message.includes('network') || 
+             error.message.includes('offline'))) {
+          setSaveError('Network issue detected. Changes will sync when connection is restored.');
+          return;
+        }
+        
+        // For other errors, show a generic message
+        setSaveError('Unable to sync to cloud. Changes saved locally.');
         
         // Implement retry logic for non-permission errors
         if (retryCount < 3) {
@@ -774,8 +784,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           </div>
         )}
         {saveError && (
-          <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg shadow-md flex items-center space-x-2">
-            <X className="w-4 h-4" />
+          <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-lg shadow-md flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4" />
             <span className="text-sm">{saveError}</span>
             {retryCount > 0 && (
               <span className="text-xs ml-2">(Retrying {retryCount}/3)</span>
