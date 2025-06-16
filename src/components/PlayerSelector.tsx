@@ -39,13 +39,32 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
 
   // Update filtered players when search term or players change
   useEffect(() => {
-    const filtered = players.filter(player => 
+    let filtered = players.filter(player => 
       !excludePlayerIds.includes(player.id) &&
       (player.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
        (player.shortId && player.shortId.toLowerCase().includes(searchTerm.toLowerCase())))
     );
+
+    // Sort players: group members first, then by name
+    filtered.sort((a, b) => {
+      if (a.isGroupMember && !b.isGroupMember) return -1;
+      if (!a.isGroupMember && b.isGroupMember) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
     setFilteredPlayers(filtered);
   }, [players, searchTerm, excludePlayerIds]);
+
+  // Auto-suggest based on first letter
+  useEffect(() => {
+    if (searchTerm.length === 1) {
+      const suggestions = players.filter(player => 
+        player.name.toLowerCase().startsWith(searchTerm.toLowerCase()) &&
+        !excludePlayerIds.includes(player.id)
+      );
+      setFilteredPlayers(suggestions);
+    }
+  }, [searchTerm, players, excludePlayerIds]);
 
   const handlePhotoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -185,7 +204,7 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
             </button>
           </div>
           
-          {/* Search */}
+          {/* Search with smart suggestions */}
           <div className="relative">
             <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
@@ -193,7 +212,7 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Search players..."
+              placeholder="Search players... (type first letter for suggestions)"
             />
           </div>
         </div>
@@ -376,6 +395,11 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
                 <div className="flex-1">
                   <div className="font-semibold text-gray-900 flex items-center">
                     {player.name}
+                    {player.isGroupMember && (
+                      <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                        Member
+                      </span>
+                    )}
                     {!player.isGroupMember && (
                       <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
                         Guest

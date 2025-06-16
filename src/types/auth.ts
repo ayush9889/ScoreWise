@@ -7,6 +7,7 @@ export interface User {
   isVerified: boolean;
   createdAt: number;
   lastLoginAt: number;
+  groupIds?: string[]; // Support for multiple groups
 }
 
 export interface Group {

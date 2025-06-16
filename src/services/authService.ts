@@ -3,7 +3,7 @@ import { storageService } from './storage';
 
 class AuthService {
   private currentUser: User | null = null;
-  private currentGroup: Group | null = null;
+  private currentGroups: Group[] = [];
 
   // Authentication
   async signUp(email: string, password: string, name: string, phone?: string): Promise<User> {
@@ -15,11 +15,13 @@ class AuthService {
       phone,
       isVerified: false,
       createdAt: Date.now(),
-      lastLoginAt: Date.now()
+      lastLoginAt: Date.now(),
+      groupIds: []
     };
 
     await storageService.saveUser(user);
     this.currentUser = user;
+    localStorage.setItem('currentUser', JSON.stringify(user));
     return user;
   }
 
@@ -33,14 +35,19 @@ class AuthService {
     user.lastLoginAt = Date.now();
     await storageService.saveUser(user);
     this.currentUser = user;
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    
+    // Load user's groups
+    await this.loadUserGroups();
+    
     return user;
   }
 
   async signOut(): Promise<void> {
     this.currentUser = null;
-    this.currentGroup = null;
+    this.currentGroups = [];
     localStorage.removeItem('currentUser');
-    localStorage.removeItem('currentGroup');
+    localStorage.removeItem('currentGroups');
   }
 
   getCurrentUser(): User | null {
@@ -48,6 +55,7 @@ class AuthService {
       const stored = localStorage.getItem('currentUser');
       if (stored) {
         this.currentUser = JSON.parse(stored);
+        this.loadUserGroups(); // Load groups when user is restored
       }
     }
     return this.currentUser;
@@ -88,7 +96,17 @@ class AuthService {
     };
 
     await storageService.saveGroup(group);
-    this.currentGroup = group;
+    
+    // Add group to user's group list
+    if (!this.currentUser.groupIds) {
+      this.currentUser.groupIds = [];
+    }
+    this.currentUser.groupIds.push(group.id);
+    await storageService.saveUser(this.currentUser);
+    
+    this.currentGroups.push(group);
+    this.saveGroupsToStorage();
+    
     return group;
   }
 
@@ -123,7 +141,17 @@ class AuthService {
     });
 
     await storageService.saveGroup(group);
-    this.currentGroup = group;
+    
+    // Add group to user's group list
+    if (!this.currentUser.groupIds) {
+      this.currentUser.groupIds = [];
+    }
+    this.currentUser.groupIds.push(group.id);
+    await storageService.saveUser(this.currentUser);
+    
+    this.currentGroups.push(group);
+    this.saveGroupsToStorage();
+    
     return group;
   }
 
@@ -174,19 +202,49 @@ class AuthService {
     return members;
   }
 
-  getCurrentGroup(): Group | null {
-    if (!this.currentGroup) {
-      const stored = localStorage.getItem('currentGroup');
-      if (stored) {
-        this.currentGroup = JSON.parse(stored);
+  // Multiple Groups Support
+  async loadUserGroups(): Promise<void> {
+    if (!this.currentUser || !this.currentUser.groupIds) {
+      this.currentGroups = [];
+      return;
+    }
+
+    const groups: Group[] = [];
+    for (const groupId of this.currentUser.groupIds) {
+      const group = await storageService.getGroup(groupId);
+      if (group) {
+        groups.push(group);
       }
     }
-    return this.currentGroup;
+    
+    this.currentGroups = groups;
+    this.saveGroupsToStorage();
+  }
+
+  getUserGroups(): Group[] {
+    if (this.currentGroups.length === 0) {
+      const stored = localStorage.getItem('currentGroups');
+      if (stored) {
+        this.currentGroups = JSON.parse(stored);
+      }
+    }
+    return this.currentGroups;
+  }
+
+  getCurrentGroup(): Group | null {
+    const groups = this.getUserGroups();
+    return groups.length > 0 ? groups[0] : null; // Return first group as default
   }
 
   setCurrentGroup(group: Group): void {
-    this.currentGroup = group;
-    localStorage.setItem('currentGroup', JSON.stringify(group));
+    // Move selected group to first position
+    this.currentGroups = this.currentGroups.filter(g => g.id !== group.id);
+    this.currentGroups.unshift(group);
+    this.saveGroupsToStorage();
+  }
+
+  private saveGroupsToStorage(): void {
+    localStorage.setItem('currentGroups', JSON.stringify(this.currentGroups));
   }
 
   // Guest Access
@@ -219,8 +277,8 @@ class AuthService {
   canUserScore(groupId: string): boolean {
     if (!this.currentUser) return false;
     
-    const group = this.currentGroup;
-    if (!group || group.id !== groupId) return false;
+    const group = this.currentGroups.find(g => g.id === groupId);
+    if (!group) return false;
 
     const member = group.members.find(m => m.userId === this.currentUser!.id);
     return member?.permissions.canScoreMatches || false;
@@ -229,8 +287,8 @@ class AuthService {
   canUserManageGroup(groupId: string): boolean {
     if (!this.currentUser) return false;
     
-    const group = this.currentGroup;
-    if (!group || group.id !== groupId) return false;
+    const group = this.currentGroups.find(g => g.id === groupId);
+    if (!group) return false;
 
     const member = group.members.find(m => m.userId === this.currentUser!.id);
     return member?.permissions.canManageMembers || false;

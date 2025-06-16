@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, Users, Trophy } from 'lucide-react';
-import { Match, Team, MatchFormat, MATCH_FORMATS } from '../types/cricket';
+import { Match, Team, MatchFormat, MATCH_FORMATS, Player } from '../types/cricket';
+import { InningsSetupModal } from './InningsSetupModal';
 
 interface MatchSetupProps {
   onMatchStart: (match: Match) => void;
@@ -13,16 +14,15 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
   const [tossDecision, setTossDecision] = useState<'bat' | 'bowl' | ''>('');
   const [selectedFormat, setSelectedFormat] = useState<MatchFormat>(MATCH_FORMATS[0]);
   const [customOvers, setCustomOvers] = useState(15);
+  const [showInningsSetup, setShowInningsSetup] = useState(false);
+  const [match, setMatch] = useState<Match | null>(null);
 
   const canStartMatch = team1Name.trim() && team2Name.trim() && tossWinner && tossDecision;
 
-  const handleStartMatch = () => {
+  const handleCreateMatch = () => {
     if (!canStartMatch) return;
 
     const overs = selectedFormat.name === 'Custom' ? customOvers : selectedFormat.overs;
-    const maxOverPerBowler = selectedFormat.name === 'Custom' 
-      ? Math.ceil(overs / 5) 
-      : selectedFormat.maxOverPerBowler;
 
     const team1: Team = {
       name: team1Name.trim(),
@@ -47,7 +47,7 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
     const battingFirst = (tossWinner === 'team1' && tossDecision === 'bat') || 
                         (tossWinner === 'team2' && tossDecision === 'bowl');
 
-    const match: Match = {
+    const newMatch: Match = {
       id: `match_${Date.now()}`,
       team1,
       team2,
@@ -59,10 +59,35 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
       totalOvers: overs,
       balls: [],
       isCompleted: false,
+      isSecondInnings: false,
       startTime: Date.now()
     };
 
-    onMatchStart(match);
+    setMatch(newMatch);
+    setShowInningsSetup(true);
+  };
+
+  const handleInningsSetup = (striker: Player, nonStriker: Player, bowler: Player) => {
+    if (!match) return;
+
+    const updatedMatch = { ...match };
+    updatedMatch.currentStriker = striker;
+    updatedMatch.currentNonStriker = nonStriker;
+    updatedMatch.currentBowler = bowler;
+
+    // Add players to their respective teams
+    if (!updatedMatch.battingTeam.players.find(p => p.id === striker.id)) {
+      updatedMatch.battingTeam.players.push(striker);
+    }
+    if (!updatedMatch.battingTeam.players.find(p => p.id === nonStriker.id)) {
+      updatedMatch.battingTeam.players.push(nonStriker);
+    }
+    if (!updatedMatch.bowlingTeam.players.find(p => p.id === bowler.id)) {
+      updatedMatch.bowlingTeam.players.push(bowler);
+    }
+
+    setShowInningsSetup(false);
+    onMatchStart(updatedMatch);
   };
 
   return (
@@ -201,7 +226,7 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
 
           {/* Start Match Button */}
           <button
-            onClick={handleStartMatch}
+            onClick={handleCreateMatch}
             disabled={!canStartMatch}
             className={`w-full py-4 rounded-xl font-semibold transition-all ${
               canStartMatch
@@ -210,10 +235,21 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
             }`}
           >
             <Play className="w-5 h-5 inline mr-2" />
-            Start Match
+            Setup Players
           </button>
         </div>
       </div>
+
+      {/* Innings Setup Modal */}
+      {match && (
+        <InningsSetupModal
+          match={match}
+          isOpen={showInningsSetup}
+          onClose={() => setShowInningsSetup(false)}
+          onSetupComplete={handleInningsSetup}
+          isSecondInnings={false}
+        />
+      )}
     </div>
   );
 };

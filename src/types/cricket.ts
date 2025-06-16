@@ -4,6 +4,7 @@ export interface Player {
   shortId?: string;
   photoUrl?: string;
   isGroupMember: boolean;
+  groupIds?: string[]; // Support for multiple groups
   stats: PlayerStats;
 }
 
@@ -77,10 +78,14 @@ export interface Match {
   totalOvers: number;
   balls: Ball[];
   isCompleted: boolean;
+  isSecondInnings?: boolean;
+  firstInningsScore?: number;
   winner?: string;
   manOfTheMatch?: Player;
   startTime: number;
   endTime?: number;
+  currentStriker?: Player;
+  currentNonStriker?: Player;
   currentBowler?: Player;
   previousBowler?: Player;
 }
