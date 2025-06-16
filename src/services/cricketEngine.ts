@@ -329,18 +329,18 @@ export class CricketEngine {
     // Get all players from the bowling team
     const allBowlers = match.bowlingTeam.players;
     
-    // Filter out bowlers who have bowled in the last 2 overs
-    const recentBowlers = match.balls
-      .slice(-12) // Last 2 overs (6 balls each)
-      .map(ball => ball.bowler.id);
+    // Filter out current batsmen (they can't bowl)
+    const currentBatsmen = [match.currentStriker?.id, match.currentNonStriker?.id];
+    
+    // Filter out bowlers who bowled the previous over
+    const previousOverBalls = match.balls.filter(b => b.overNumber === nextOver - 1);
+    const previousBowlerId = previousOverBalls.length > 0 ? previousOverBalls[0].bowler.id : null;
     
     return allBowlers.filter(bowler => 
-      // Must not be the current bowler
-      bowler.id !== match.currentBowler?.id &&
-      // Must not be the previous bowler
-      bowler.id !== match.previousBowler?.id &&
-      // Must not have bowled in the last 2 overs
-      !recentBowlers.includes(bowler.id)
+      // Must not be a current batsman
+      !currentBatsmen.includes(bowler.id) &&
+      // Must not have bowled the previous over
+      bowler.id !== previousBowlerId
     );
   }
 
@@ -379,7 +379,7 @@ export class CricketEngine {
     }
     
     // Check if target is reached (for second innings)
-    if (match.isSecondInnings && battingTeam.score > match.firstInningsScore) {
+    if (match.isSecondInnings && match.firstInningsScore && battingTeam.score > match.firstInningsScore) {
       return true;
     }
     
@@ -391,21 +391,31 @@ export class CricketEngine {
       return 'Match in progress';
     }
 
-    if (match.isSecondInnings) {
-      const battingTeam = match.battingTeam;
-      const bowlingTeam = match.bowlingTeam;
+    if (match.isSecondInnings && match.firstInningsScore) {
+      const chasingTeam = match.battingTeam;
+      const defendingTeam = match.bowlingTeam;
       
-      if (battingTeam.score > match.firstInningsScore) {
-        const wicketsRemaining = 10 - battingTeam.wickets;
-        return `${battingTeam.name} won by ${wicketsRemaining} wickets`;
-      } else if (battingTeam.score < match.firstInningsScore) {
-        const runsMargin = match.firstInningsScore - battingTeam.score;
-        return `${bowlingTeam.name} won by ${runsMargin} runs`;
+      if (chasingTeam.score > match.firstInningsScore) {
+        const wicketsRemaining = 10 - chasingTeam.wickets;
+        return `${chasingTeam.name} won by ${wicketsRemaining} wickets`;
+      } else if (chasingTeam.score < match.firstInningsScore) {
+        const runsMargin = match.firstInningsScore - chasingTeam.score;
+        return `${defendingTeam.name} won by ${runsMargin} runs`;
       } else {
         return 'Match tied';
       }
     }
 
-    return 'Match completed';
+    // First innings only completed
+    const team1Score = match.team1.score;
+    const team2Score = match.team2.score;
+    
+    if (team1Score > team2Score) {
+      return `${match.team1.name} won by ${team1Score - team2Score} runs`;
+    } else if (team2Score > team1Score) {
+      return `${match.team2.name} won by ${team2Score - team1Score} runs`;
+    } else {
+      return 'Match tied';
+    }
   }
 }

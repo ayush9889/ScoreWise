@@ -23,7 +23,7 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
       }
       return sum;
     }, 0);
-    const ballsFaced = playerBalls.filter(b => !b.isWide && !ball.isNoBall).length;
+    const ballsFaced = playerBalls.filter(b => !b.isWide && !b.isNoBall).length;
     const fours = playerBalls.filter(b => b.runs === 4).length;
     const sixes = playerBalls.filter(b => b.runs === 6).length;
     const strikeRate = ballsFaced > 0 ? ((runs / ballsFaced) * 100).toFixed(1) : '0.0';

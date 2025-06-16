@@ -99,30 +99,45 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     loadMatch();
   }, [initialMatch.id]);
 
-  // Save match to cloud storage whenever it changes
+  // Save match to both local and cloud storage whenever it changes
   useEffect(() => {
     const saveMatch = async () => {
       try {
         setIsSaving(true);
         setSaveError(null);
-        await cloudStorageService.saveMatch(match);
-        setRetryCount(0); // Reset retry count on successful save
-      } catch (error) {
-        console.error('Error saving match to cloud:', error);
-        setSaveError(error instanceof Error ? error.message : 'Failed to save match to cloud storage');
         
-        // Implement retry logic
-        if (retryCount < 3) {
-          setRetryCount(prev => prev + 1);
-          setTimeout(() => {
-            saveMatch();
-          }, 2000 * (retryCount + 1)); // Exponential backoff
+        // Always save to local storage first (immediate)
+        await storageService.saveMatch(match);
+        
+        // Try to save to cloud storage (may fail if offline)
+        try {
+          await cloudStorageService.saveMatch(match);
+          setRetryCount(0); // Reset retry count on successful save
+        } catch (cloudError) {
+          console.warn('Cloud save failed, data saved locally:', cloudError);
+          setSaveError('Offline mode - data saved locally');
+          
+          // Implement retry logic for cloud save
+          if (retryCount < 3) {
+            setRetryCount(prev => prev + 1);
+            setTimeout(() => {
+              cloudStorageService.saveMatch(match).catch(() => {
+                console.warn('Retry failed, continuing in offline mode');
+              });
+            }, 2000 * (retryCount + 1)); // Exponential backoff
+          }
         }
+      } catch (error) {
+        console.error('Error saving match:', error);
+        setSaveError('Failed to save match data');
       } finally {
         setIsSaving(false);
       }
     };
-    saveMatch();
+    
+    // Debounce saves to avoid too frequent updates
+    const timeoutId = setTimeout(saveMatch, 500);
+    return () => clearTimeout(timeoutId);
   }, [match, retryCount]);
 
   // Calculate remaining runs and balls
@@ -160,25 +175,37 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   }, [match.isCompleted]);
 
   const handleInningsTransition = () => {
-    setShowInningsBreak(true);
+    // Only show innings break if first innings is actually complete
+    if (match.battingTeam.overs >= match.totalOvers || match.battingTeam.wickets >= 10) {
+      setShowInningsBreak(true);
+    }
   };
 
   const handleInningsBreakContinue = () => {
     const updatedMatch = { ...match };
     updatedMatch.isSecondInnings = true;
-    updatedMatch.battingTeam = match.bowlingTeam;
-    updatedMatch.bowlingTeam = match.battingTeam;
+    
+    // Store first innings score
     updatedMatch.firstInningsScore = match.battingTeam.score;
     setTarget(match.battingTeam.score + 1);
+    
+    // Swap teams
+    const tempTeam = updatedMatch.battingTeam;
+    updatedMatch.battingTeam = updatedMatch.bowlingTeam;
+    updatedMatch.bowlingTeam = tempTeam;
+    
+    // Reset batting team stats
     updatedMatch.battingTeam.score = 0;
     updatedMatch.battingTeam.overs = 0;
     updatedMatch.battingTeam.balls = 0;
     updatedMatch.battingTeam.wickets = 0;
     updatedMatch.battingTeam.extras = { wides: 0, noBalls: 0, byes: 0, legByes: 0 };
+    
     // Clear current players for new selection
     updatedMatch.currentStriker = undefined;
     updatedMatch.currentNonStriker = undefined;
     updatedMatch.currentBowler = undefined;
+    
     setMatch(updatedMatch);
     setShowInningsBreak(false);
     setShowInningsSetup(true);
@@ -211,19 +238,36 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   };
 
   const handleMatchComplete = () => {
+    const updatedMatch = { ...match };
+    updatedMatch.isCompleted = true;
+    updatedMatch.endTime = Date.now();
+    updatedMatch.winner = CricketEngine.getMatchResult(updatedMatch);
+    
+    // Calculate Man of the Match
+    const motm = CricketEngine.calculateManOfTheMatch(updatedMatch);
+    if (motm) {
+      updatedMatch.manOfTheMatch = motm;
+    }
+    
+    setMatch(updatedMatch);
     setShowVictoryAnimation(true);
+    
     setTimeout(() => {
-      setShowMatchSummary(true);
       setShowVictoryAnimation(false);
+      onMatchComplete(updatedMatch);
     }, 3000);
   };
 
   const handleScoreUpdate = (ball: Ball) => {
+    // Save current state for undo
+    setActionHistory([...actionHistory, { ...match }]);
+    setRedoStack([]); // Clear redo stack when new action is performed
+    
     const updatedMatch = { ...match };
     
     // Add ball to history
     updatedMatch.balls.push(ball);
-    setActionHistory([...actionHistory, ball]);
+    updatedMatch.lastUpdated = Date.now();
 
     // Update batting team score
     updatedMatch.battingTeam.score += ball.runs;
@@ -231,31 +275,32 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     // Handle extras
     if (ball.isWide) {
       updatedMatch.battingTeam.extras.wides++;
-      if (ball.runs > 1) {
-        updatedMatch.battingTeam.score += ball.runs - 1;
-      }
     } else if (ball.isNoBall) {
       updatedMatch.battingTeam.extras.noBalls++;
-      if (ball.runs > 1) {
-        const strikerBalls = updatedMatch.balls.filter(b => b.striker.id === ball.striker.id);
-        const strikerRuns = strikerBalls.reduce((sum, b) => sum + b.runs, 0);
-        const lastBall = updatedMatch.balls[updatedMatch.balls.length - 1];
-        lastBall.runs = ball.runs;
-      }
     } else if (ball.isBye) {
       updatedMatch.battingTeam.extras.byes += ball.runs;
-      updatedMatch.battingTeam.score += ball.runs;
     } else if (ball.isLegBye) {
       updatedMatch.battingTeam.extras.legByes += ball.runs;
-      updatedMatch.battingTeam.score += ball.runs;
     }
 
     // Handle wickets
     if (ball.isWicket) {
       updatedMatch.battingTeam.wickets++;
+      // Show new batsman selector if not all out
+      if (updatedMatch.battingTeam.wickets < 10) {
+        setShowNewBatsmanSelector(true);
+      }
     }
 
-    // Check if over is complete
+    // Handle strike rotation
+    const shouldRotateStrike = (ball.runs % 2 === 1) && !ball.isWicket;
+    if (shouldRotateStrike) {
+      const temp = updatedMatch.currentStriker;
+      updatedMatch.currentStriker = updatedMatch.currentNonStriker;
+      updatedMatch.currentNonStriker = temp;
+    }
+
+    // Check if over is complete (only for legal deliveries)
     if (!ball.isWide && !ball.isNoBall) {
       updatedMatch.battingTeam.balls++;
       
@@ -263,26 +308,26 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         updatedMatch.battingTeam.overs++;
         updatedMatch.battingTeam.balls = 0;
         
+        // Rotate strike at end of over
+        const temp = updatedMatch.currentStriker;
+        updatedMatch.currentStriker = updatedMatch.currentNonStriker;
+        updatedMatch.currentNonStriker = temp;
+        
         setOverCompleteMessage(`Over ${updatedMatch.battingTeam.overs} completed!`);
-        setPendingStrikeRotation(true);
+        
+        // Check if innings is complete
+        if (updatedMatch.battingTeam.overs >= match.totalOvers) {
+          if (!updatedMatch.isSecondInnings) {
+            handleInningsTransition();
+          } else {
+            handleMatchComplete();
+          }
+          setMatch(updatedMatch);
+          return;
+        }
         
         // Force bowler change after over completion
-        const availableBowlers = CricketEngine.getAvailableBowlers(updatedMatch, updatedMatch.battingTeam.overs + 1);
-        // Filter out current batsmen from available bowlers
-        const currentBatsmen = [updatedMatch.currentStriker?.id, updatedMatch.currentNonStriker?.id];
-        const eligibleBowlers = availableBowlers.filter(b => !currentBatsmen.includes(b.id));
-        
-        if (eligibleBowlers.length > 0) {
-          setShowBowlerSelector(true);
-        } else {
-          const shouldAddBowler = window.confirm(
-            'No other bowlers available for the next over! Would you like to add more bowlers to the team?'
-          );
-          if (shouldAddBowler) {
-            setAddPlayerType('bowling');
-            setShowAddPlayerModal(true);
-          }
-        }
+        setShowBowlerSelector(true);
       }
     }
 
@@ -291,15 +336,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       if (!updatedMatch.isSecondInnings) {
         handleInningsTransition();
       } else {
-        updatedMatch.isCompleted = true;
-        updatedMatch.winner = CricketEngine.getMatchResult(updatedMatch);
         handleMatchComplete();
       }
-    }
-
-    // Update bowler history
-    if (ball.bowler.id !== updatedMatch.currentBowler?.id) {
-      setBowlerHistory(prev => [...prev, ball.bowler.id]);
     }
 
     setMatch(updatedMatch);
@@ -307,7 +345,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
 
   const handleStrikeRotation = () => {
     setPendingStrikeRotation(false);
-    // Strike rotation will be handled by the ScoringPanel component
+    setOverCompleteMessage(null);
   };
 
   const handleBowlerChange = (newBowler: Player) => {
@@ -326,8 +364,12 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   };
 
   const handleNewBatsman = (newBatsman: Player) => {
-    // Add new batsman to batting team if not already present
     const updatedMatch = { ...match };
+    
+    // Replace the striker (who got out) with new batsman
+    updatedMatch.currentStriker = newBatsman;
+    
+    // Add new batsman to batting team if not already present
     if (!updatedMatch.battingTeam.players.find(p => p.id === newBatsman.id)) {
       updatedMatch.battingTeam.players.push(newBatsman);
     }
@@ -339,45 +381,21 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const handleUndo = () => {
     if (actionHistory.length === 0) return;
 
-    const lastBall = actionHistory[actionHistory.length - 1];
-    const updatedMatch = { ...match };
-
-    // Remove last ball
-    updatedMatch.balls = updatedMatch.balls.slice(0, -1);
-
-    // Revert score
-    updatedMatch.battingTeam.score -= lastBall.runs;
-
-    // Revert extras
-    if (lastBall.isWide) {
-      updatedMatch.battingTeam.extras.wides--;
-    } else if (lastBall.isNoBall) {
-      updatedMatch.battingTeam.extras.noBalls--;
-    } else if (lastBall.isBye) {
-      updatedMatch.battingTeam.extras.byes -= lastBall.runs;
-    } else if (lastBall.isLegBye) {
-      updatedMatch.battingTeam.extras.legByes -= lastBall.runs;
-    }
-
-    // Revert wickets
-    if (lastBall.isWicket) {
-      updatedMatch.battingTeam.wickets--;
-    }
-
-    // Revert ball count
-    if (!lastBall.isWide && !lastBall.isNoBall) {
-      if (updatedMatch.battingTeam.balls === 0) {
-        updatedMatch.battingTeam.overs--;
-        updatedMatch.battingTeam.balls = 5;
-      } else {
-        updatedMatch.battingTeam.balls--;
-      }
-    }
-
-    setMatch(updatedMatch);
+    const previousState = actionHistory[actionHistory.length - 1];
+    setRedoStack([match, ...redoStack]);
+    setMatch(previousState);
     setActionHistory(actionHistory.slice(0, -1));
     setPendingStrikeRotation(false);
     setOverCompleteMessage(null);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+
+    const nextState = redoStack[0];
+    setActionHistory([...actionHistory, match]);
+    setMatch(nextState);
+    setRedoStack(redoStack.slice(1));
   };
 
   const getAvailableBowlers = (): Player[] => {
@@ -389,7 +407,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     const updatedMatch = { ...match };
     updatedMatch.manOfTheMatch = player;
     setMatch(updatedMatch);
-    setShowBowlerSelector(false);
+    setShowMotmSelector(false);
     onMatchComplete(updatedMatch);
   };
 
@@ -450,24 +468,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           <p className="text-green-600 text-xs mt-1">
             Strike rotated. Please select new bowler to continue.
           </p>
-        </div>
-      )}
-
-      {/* Strike Rotation Alert */}
-      {pendingStrikeRotation && !overCompleteMessage && (
-        <div className="bg-blue-100 border-l-4 border-blue-500 p-2 m-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <RefreshCw className="w-4 h-4 text-blue-600 mr-1" />
-              <p className="text-blue-700 text-sm font-semibold">Strike Rotated</p>
-            </div>
-            <button
-              onClick={handleStrikeRotation}
-              className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs hover:bg-blue-700"
-            >
-              Continue
-            </button>
-          </div>
         </div>
       )}
 
@@ -699,48 +699,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           </motion.div>
         )}
 
-        {showMatchSummary && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          >
-            <div className="bg-white rounded-lg p-8 w-full max-w-2xl">
-              <h2 className="text-2xl font-bold mb-4">Match Summary</h2>
-              <div className="space-y-4">
-                <p className="text-xl font-semibold">{CricketEngine.getMatchResult(match)}</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="font-semibold mb-2">First Innings</h3>
-                    <p>{match.battingTeam.name}: {match.firstInningsScore}</p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold mb-2">Second Innings</h3>
-                    <p>{match.bowlingTeam.name}: {match.bowlingTeam.score}</p>
-                  </div>
-                </div>
-                {!match.manOfTheMatch && (
-                  <div className="mt-4">
-                    <h3 className="font-semibold mb-2">Select Man of the Match</h3>
-                    <PlayerSelector
-                      title="Man of the Match"
-                      onPlayerSelect={(player) => {
-                        const updatedMatch = { ...match, manOfTheMatch: player };
-                        setMatch(updatedMatch);
-                        onMatchComplete(updatedMatch);
-                      }}
-                      onClose={() => setShowMatchSummary(false)}
-                      players={[...match.battingTeam.players, ...match.bowlingTeam.players]}
-                      showOnlyAvailable={false}
-                      allowAddPlayer={false}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
         {showBatsmanSelector && (
           <PlayerSelector
             title="Select Opening Batsmen"
@@ -771,16 +729,19 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         {isSaving && (
           <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg shadow-md flex items-center space-x-2">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800"></div>
-            <span>Saving to cloud...</span>
+            <span>Saving...</span>
           </div>
         )}
         {saveError && (
-          <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg shadow-md flex items-center space-x-2">
-            <X className="w-4 h-4" />
-            <span>{saveError}</span>
-            {retryCount > 0 && (
-              <span className="text-sm ml-2">(Retrying {retryCount}/3)</span>
-            )}
+          <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-lg shadow-md flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4" />
+            <span className="text-sm">{saveError}</span>
+          </div>
+        )}
+        {!isSaving && !saveError && (
+          <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg shadow-md flex items-center space-x-2">
+            <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+            <span className="text-sm">Synced</span>
           </div>
         )}
       </div>

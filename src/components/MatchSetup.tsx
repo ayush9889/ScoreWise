@@ -13,6 +13,7 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
   const [tossDecision, setTossDecision] = useState<'bat' | 'bowl' | ''>('');
   const [selectedFormat, setSelectedFormat] = useState<MatchFormat>(MATCH_FORMATS[0]);
   const [customOvers, setCustomOvers] = useState(15);
+  const [venue, setVenue] = useState('');
 
   const canStartMatch = team1Name.trim() && team2Name.trim() && tossWinner && tossDecision;
 
@@ -20,9 +21,6 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
     if (!canStartMatch) return;
 
     const overs = selectedFormat.name === 'Custom' ? customOvers : selectedFormat.overs;
-    const maxOverPerBowler = selectedFormat.name === 'Custom' 
-      ? Math.ceil(overs / 5) 
-      : selectedFormat.maxOverPerBowler;
 
     const team1: Team = {
       name: team1Name.trim(),
@@ -53,13 +51,16 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
       team2,
       tossWinner: tossWinner === 'team1' ? team1Name : team2Name,
       tossDecision,
-      currentInnings: 1,
       battingTeam: battingFirst ? team1 : team2,
       bowlingTeam: battingFirst ? team2 : team1,
       totalOvers: overs,
       balls: [],
       isCompleted: false,
-      startTime: Date.now()
+      isSecondInnings: false,
+      startTime: Date.now(),
+      venue: venue.trim() || 'Local Ground',
+      date: Date.now(),
+      lastUpdated: Date.now()
     };
 
     onMatchStart(match);
@@ -104,6 +105,19 @@ export const MatchSetup: React.FC<MatchSetupProps> = ({ onMatchStart }) => {
                 onChange={(e) => setTeam2Name(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 placeholder="Enter team name"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Venue (Optional)
+              </label>
+              <input
+                type="text"
+                value={venue}
+                onChange={(e) => setVenue(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Match venue"
               />
             </div>
           </div>
