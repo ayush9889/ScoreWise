@@ -1,159 +1,177 @@
 import { Match, Player, Ball, Team, WicketType, PlayerStats, PlayerPerformance } from '../types/cricket';
 
 export class CricketEngine {
-  static calculateManOfTheMatch(match: Match): Player | null {
-    if (!match.isCompleted) return null;
-
-    const allPlayers = [...match.team1.players, ...match.team2.players];
-    const performances: PlayerPerformance[] = [];
-
-    allPlayers.forEach(player => {
-      const performance = this.calculatePlayerPerformance(player, match);
-      performances.push(performance);
-    });
-
-    // Sort by total performance score
-    performances.sort((a, b) => b.totalScore - a.totalScore);
+  // Strike rotation logic based on real cricket rules
+  static shouldRotateStrike(ball: Ball, isOverComplete: boolean): boolean {
+    // Don't rotate on wides or no-balls (unless runs are taken)
+    if (ball.isWide || ball.isNoBall) {
+      return ball.runs > 1; // Only rotate if extra runs are taken
+    }
     
-    if (performances.length === 0) return null;
+    // Rotate on odd runs (1, 3, 5, etc.)
+    const shouldRotateOnRuns = ball.runs % 2 === 1;
     
-    const topPerformer = performances[0];
-    return allPlayers.find(p => p.id === topPerformer.playerId) || null;
+    // Always rotate at end of over (even if no runs scored)
+    return shouldRotateOnRuns || isOverComplete;
   }
 
-  private static calculatePlayerPerformance(player: Player, match: Match): PlayerPerformance {
-    let battingScore = 0;
-    let bowlingScore = 0;
-    let fieldingScore = 0;
-
-    // Batting Performance
-    const battingBalls = match.balls.filter(b => b.striker.id === player.id);
-    let runsScored = 0;
-    let ballsFaced = 0;
-    let fours = 0;
-    let sixes = 0;
-    let gotOut = false;
-
-    battingBalls.forEach(ball => {
-      if (ball.striker.id === player.id) {
-        if (!ball.isWide && !ball.isNoBall && !ball.isBye && !ball.isLegBye) {
-          runsScored += ball.runs;
-        }
-        if (!ball.isWide && !ball.isNoBall) {
-          ballsFaced++;
-        }
-        if (ball.runs === 4) fours++;
-        if (ball.runs === 6) sixes++;
-        if (ball.isWicket) gotOut = true;
-      }
-    });
-
-    // Batting score calculation (based on CricHQ/CricHero algorithms)
-    if (ballsFaced > 0) {
-      const strikeRate = (runsScored / ballsFaced) * 100;
-      
-      // Base runs score
-      battingScore += runsScored * 1.5;
-      
-      // Strike rate bonus/penalty
-      if (strikeRate >= 150) battingScore += runsScored * 0.4;
-      else if (strikeRate >= 120) battingScore += runsScored * 0.2;
-      else if (strikeRate < 80 && ballsFaced >= 10) battingScore -= runsScored * 0.1;
-      
-      // Milestone bonuses
-      if (runsScored >= 100) battingScore += 50;
-      else if (runsScored >= 50) battingScore += 25;
-      else if (runsScored >= 30) battingScore += 10;
-      
-      // Boundary bonuses
-      battingScore += fours * 2;
-      battingScore += sixes * 4;
-      
-      // Not out bonus for significant scores
-      if (!gotOut && runsScored >= 20) battingScore += 10;
-      
-      // Duck penalty
-      if (gotOut && runsScored === 0) battingScore -= 10;
-    }
-
-    // Bowling Performance
-    const bowlingBalls = match.balls.filter(b => b.bowler.id === player.id);
-    let wicketsTaken = 0;
-    let runsConceded = 0;
-    let ballsBowled = 0;
-    let dotBalls = 0;
-
-    bowlingBalls.forEach(ball => {
-      if (!ball.isWide && !ball.isNoBall) {
-        ballsBowled++;
-        if (ball.runs === 0) dotBalls++;
-      }
-      if (ball.isWicket && ball.wicketType !== 'run_out') {
-        wicketsTaken++;
-      }
-      runsConceded += ball.runs;
-    });
-
-    // Bowling score calculation
-    if (ballsBowled > 0) {
-      const economyRate = (runsConceded / ballsBowled) * 6;
-      const dotBallPercentage = (dotBalls / ballsBowled) * 100;
-      
-      // Wicket points
-      bowlingScore += wicketsTaken * 25;
-      
-      // Economy rate bonus/penalty
-      if (economyRate <= 4) bowlingScore += 20;
-      else if (economyRate <= 6) bowlingScore += 10;
-      else if (economyRate >= 10) bowlingScore -= 10;
-      
-      // Dot ball bonus
-      if (dotBallPercentage >= 60) bowlingScore += 15;
-      else if (dotBallPercentage >= 40) bowlingScore += 8;
-      
-      // Wicket milestone bonuses
-      if (wicketsTaken >= 5) bowlingScore += 30;
-      else if (wicketsTaken >= 3) bowlingScore += 15;
-      
-      // Maiden over bonus (if applicable)
-      const overs = Math.floor(ballsBowled / 6);
-      if (overs > 0 && runsConceded === 0) bowlingScore += overs * 10;
-    }
-
-    // Fielding Performance
-    const catches = match.balls.filter(b => 
-      b.isWicket && b.wicketType === 'caught' && b.fielder?.id === player.id
-    ).length;
-    
-    const runOuts = match.balls.filter(b => 
-      b.isWicket && b.wicketType === 'run_out' && b.fielder?.id === player.id
-    ).length;
-
-    const stumpings = match.balls.filter(b => 
-      b.isWicket && b.wicketType === 'stumped' && b.fielder?.id === player.id
-    ).length;
-
-    // Fielding score calculation
-    fieldingScore += catches * 8;
-    fieldingScore += runOuts * 12;
-    fieldingScore += stumpings * 10;
-
-    const totalScore = battingScore + bowlingScore + fieldingScore;
-
-    return {
-      playerId: player.id,
-      battingScore,
-      bowlingScore,
-      fieldingScore,
-      totalScore,
-      runsScored,
-      ballsFaced,
-      wicketsTaken,
-      catches,
-      runOuts
-    };
+  // Check if over is complete
+  static isOverComplete(match: Match): boolean {
+    const validBalls = match.balls.filter(b => 
+      b.overNumber === (match.battingTeam.overs + 1) && 
+      !b.isWide && 
+      !b.isNoBall
+    );
+    return validBalls.length >= 6;
   }
 
+  // Strict bowler validation - cannot bowl consecutive overs
+  static canBowlerBowlNextOver(bowler: Player, match: Match): boolean {
+    if (match.balls.length === 0) return true;
+    
+    const currentOver = match.battingTeam.overs + 1;
+    const previousOver = currentOver - 1;
+    
+    if (previousOver <= 0) return true;
+    
+    // Check who bowled the previous over
+    const previousOverBalls = match.balls.filter(b => b.overNumber === previousOver);
+    if (previousOverBalls.length === 0) return true;
+    
+    const previousOverBowler = previousOverBalls[0]?.bowler;
+    
+    // Bowler cannot bowl consecutive overs
+    return previousOverBowler?.id !== bowler.id;
+  }
+
+  // Get available bowlers for next over (excluding previous over bowler)
+  static getAvailableBowlers(match: Match, nextOver: number): Player[] {
+    const allBowlers = match.bowlingTeam.players;
+    
+    if (nextOver <= 1) return allBowlers;
+    
+    const previousOver = nextOver - 1;
+    const previousOverBalls = match.balls.filter(b => b.overNumber === previousOver);
+    
+    if (previousOverBalls.length === 0) return allBowlers;
+    
+    const previousBowlerId = previousOverBalls[0]?.bowler?.id;
+    
+    // Filter out the previous over bowler and current batsmen
+    return allBowlers.filter(bowler => 
+      bowler.id !== previousBowlerId &&
+      bowler.id !== match.currentStriker?.id &&
+      bowler.id !== match.currentNonStriker?.id
+    );
+  }
+
+  // Process ball and update match state with proper cricket rules
+  static processBall(match: Match, ball: Ball): Match {
+    const updatedMatch = { ...match };
+    
+    // Add ball to match
+    updatedMatch.balls.push(ball);
+    
+    // Update team score
+    updatedMatch.battingTeam.score += ball.runs;
+    
+    // Handle extras
+    if (ball.isWide) {
+      updatedMatch.battingTeam.extras.wides++;
+    } else if (ball.isNoBall) {
+      updatedMatch.battingTeam.extras.noBalls++;
+    } else if (ball.isBye) {
+      updatedMatch.battingTeam.extras.byes += ball.runs;
+    } else if (ball.isLegBye) {
+      updatedMatch.battingTeam.extras.legByes += ball.runs;
+    }
+    
+    // Handle wickets
+    if (ball.isWicket) {
+      updatedMatch.battingTeam.wickets++;
+    }
+    
+    // Update ball count (only for valid deliveries)
+    if (!ball.isWide && !ball.isNoBall) {
+      updatedMatch.battingTeam.balls++;
+      
+      // Check if over is complete
+      if (updatedMatch.battingTeam.balls >= 6) {
+        updatedMatch.battingTeam.overs++;
+        updatedMatch.battingTeam.balls = 0;
+        
+        // Force strike rotation at end of over
+        const temp = updatedMatch.currentStriker;
+        updatedMatch.currentStriker = updatedMatch.currentNonStriker;
+        updatedMatch.currentNonStriker = temp;
+      } else {
+        // Check for strike rotation during over
+        if (this.shouldRotateStrike(ball, false)) {
+          const temp = updatedMatch.currentStriker;
+          updatedMatch.currentStriker = updatedMatch.currentNonStriker;
+          updatedMatch.currentNonStriker = temp;
+        }
+      }
+    } else {
+      // For wides and no-balls, only rotate if extra runs are taken
+      if (ball.runs > 1) {
+        const temp = updatedMatch.currentStriker;
+        updatedMatch.currentStriker = updatedMatch.currentNonStriker;
+        updatedMatch.currentNonStriker = temp;
+      }
+    }
+    
+    return updatedMatch;
+  }
+
+  // Check if innings is complete
+  static isInningsComplete(match: Match): boolean {
+    const battingTeam = match.battingTeam;
+    
+    // All overs completed
+    if (battingTeam.overs >= match.totalOvers) {
+      return true;
+    }
+    
+    // All wickets lost (assuming 10 wickets max)
+    if (battingTeam.wickets >= 10) {
+      return true;
+    }
+    
+    // Target reached in second innings
+    if (match.isSecondInnings && match.firstInningsScore && 
+        battingTeam.score > match.firstInningsScore) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Get match result
+  static getMatchResult(match: Match): string {
+    if (!match.isCompleted) {
+      return 'Match in progress';
+    }
+
+    if (match.isSecondInnings && match.firstInningsScore) {
+      const chasingTeam = match.battingTeam;
+      const defendingTeam = match.bowlingTeam;
+      
+      if (chasingTeam.score > match.firstInningsScore) {
+        const wicketsRemaining = 10 - chasingTeam.wickets;
+        return `${chasingTeam.name} won by ${wicketsRemaining} wickets`;
+      } else if (chasingTeam.score < match.firstInningsScore) {
+        const runsMargin = match.firstInningsScore - chasingTeam.score;
+        return `${defendingTeam.name} won by ${runsMargin} runs`;
+      } else {
+        return 'Match tied';
+      }
+    }
+
+    return 'Match completed';
+  }
+
+  // Calculate comprehensive player stats
   static updatePlayerStats(player: Player, match: Match): PlayerStats {
     const stats = { ...player.stats };
     stats.matchesPlayed++;
@@ -168,18 +186,16 @@ export class CricketEngine {
     let dotBalls = 0;
 
     battingBalls.forEach(ball => {
-      if (ball.striker.id === player.id) {
-        if (!ball.isWide && !ball.isNoBall && !ball.isBye && !ball.isLegBye) {
-          runsScored += ball.runs;
-        }
-        if (!ball.isWide && !ball.isNoBall) {
-          ballsFaced++;
-          if (ball.runs === 0) dotBalls++;
-        }
-        if (ball.runs === 4) fours++;
-        if (ball.runs === 6) sixes++;
-        if (ball.isWicket) gotOut = true;
+      if (!ball.isWide && !ball.isNoBall && !ball.isBye && !ball.isLegBye) {
+        runsScored += ball.runs;
       }
+      if (!ball.isWide && !ball.isNoBall) {
+        ballsFaced++;
+        if (ball.runs === 0) dotBalls++;
+      }
+      if (ball.runs === 4) fours++;
+      if (ball.runs === 6) sixes++;
+      if (ball.isWicket && ball.striker.id === player.id) gotOut = true;
     });
 
     stats.runsScored += runsScored;
@@ -276,136 +292,159 @@ export class CricketEngine {
     return false;
   }
 
+  // Calculate batting average
   static calculateBattingAverage(stats: PlayerStats): string {
-    if (stats.timesOut === 0) return stats.runsScored.toString();
+    if (stats.timesOut === 0) return stats.runsScored > 0 ? stats.runsScored.toString() : '0';
     return (stats.runsScored / stats.timesOut).toFixed(2);
   }
 
+  // Calculate strike rate
   static calculateStrikeRate(stats: PlayerStats): string {
     if (stats.ballsFaced === 0) return '0.00';
     return ((stats.runsScored / stats.ballsFaced) * 100).toFixed(2);
   }
 
+  // Calculate bowling average
   static calculateBowlingAverage(stats: PlayerStats): string {
     if (stats.wicketsTaken === 0) return '0.00';
     return (stats.runsConceded / stats.wicketsTaken).toFixed(2);
   }
 
+  // Calculate economy rate
   static calculateEconomyRate(stats: PlayerStats): string {
     if (stats.ballsBowled === 0) return '0.00';
     return ((stats.runsConceded / stats.ballsBowled) * 6).toFixed(2);
   }
 
-  static isOverComplete(balls: Ball[], currentOver: number): boolean {
-    const overBalls = balls.filter(b => 
-      b.overNumber === currentOver && !b.isWide && !b.isNoBall
-    );
-    return overBalls.length >= 6;
+  // Calculate Man of the Match based on performance
+  static calculateManOfTheMatch(match: Match): Player | null {
+    if (!match.isCompleted) return null;
+
+    const allPlayers = [...match.team1.players, ...match.team2.players];
+    const performances: PlayerPerformance[] = [];
+
+    allPlayers.forEach(player => {
+      const performance = this.calculatePlayerPerformance(player, match);
+      performances.push(performance);
+    });
+
+    // Sort by total performance score
+    performances.sort((a, b) => b.totalScore - a.totalScore);
+    
+    if (performances.length === 0) return null;
+    
+    const topPerformer = performances[0];
+    return allPlayers.find(p => p.id === topPerformer.playerId) || null;
   }
 
-  static shouldRotateStrike(ball: Ball, isOverComplete: boolean): boolean {
-    // Rotate strike on odd runs or at end of over
-    return (ball.runs % 2 === 1) || isOverComplete;
-  }
+  private static calculatePlayerPerformance(player: Player, match: Match): PlayerPerformance {
+    let battingScore = 0;
+    let bowlingScore = 0;
+    let fieldingScore = 0;
 
-  static validateBowlerChange(bowler: Player, balls: Ball[], currentOver: number, maxOversPerBowler: number): boolean {
-    const bowlerOvers = new Set(
-      balls.filter(b => b.bowler.id === bowler.id).map(b => b.overNumber)
-    );
-    
-    return bowlerOvers.size < maxOversPerBowler;
-  }
+    // Batting Performance
+    const battingBalls = match.balls.filter(b => b.striker.id === player.id);
+    let runsScored = 0;
+    let ballsFaced = 0;
+    let fours = 0;
+    let sixes = 0;
+    let gotOut = false;
 
-  static canBowlerBowlConsecutiveOvers(bowler: Player, balls: Ball[], currentOver: number): boolean {
-    // Check if bowler bowled the previous over
-    const previousOverBalls = balls.filter(b => b.overNumber === currentOver - 1);
-    if (previousOverBalls.length === 0) return true;
-    
-    const previousOverBowler = previousOverBalls[0]?.bowler;
-    return previousOverBowler?.id !== bowler.id;
-  }
-
-  static getAvailableBowlers(match: Match, nextOver: number): Player[] {
-    // Get all players from the bowling team
-    const allBowlers = match.bowlingTeam.players;
-    
-    // Filter out bowlers who have bowled in the last 2 overs
-    const recentBowlers = match.balls
-      .slice(-12) // Last 2 overs (6 balls each)
-      .map(ball => ball.bowler.id);
-    
-    return allBowlers.filter(bowler => 
-      // Must not be the current bowler
-      bowler.id !== match.currentBowler?.id &&
-      // Must not be the previous bowler
-      bowler.id !== match.previousBowler?.id &&
-      // Must not have bowled in the last 2 overs
-      !recentBowlers.includes(bowler.id)
-    );
-  }
-
-  static canBowlerContinue(match: Match, bowler: Player): boolean {
-    // Check if this bowler has bowled in the last 2 overs
-    const recentBowlers = match.balls
-      .slice(-12) // Last 2 overs (6 balls each)
-      .map(ball => ball.bowler.id);
-    
-    return !recentBowlers.includes(bowler.id);
-  }
-
-  static getNextBatsmen(match: Match): Player[] {
-    const battingTeam = match.battingTeam;
-    const allBatsmen = battingTeam.players;
-    
-    // Get players who haven't batted yet
-    const battedPlayers = match.balls
-      .filter(ball => ball.isWicket)
-      .map(ball => ball.striker.id);
-    
-    return allBatsmen.filter(player => !battedPlayers.includes(player.id));
-  }
-
-  static isInningsComplete(match: Match): boolean {
-    const battingTeam = match.battingTeam;
-    
-    // Check if all overs are completed
-    if (battingTeam.overs >= match.totalOvers) {
-      return true;
-    }
-    
-    // Check if all wickets are lost (assuming 10 wickets max)
-    if (battingTeam.wickets >= 10) {
-      return true;
-    }
-    
-    // Check if target is reached (for second innings)
-    if (match.isSecondInnings && battingTeam.score > match.firstInningsScore) {
-      return true;
-    }
-    
-    return false;
-  }
-
-  static getMatchResult(match: Match): string {
-    if (!match.isCompleted) {
-      return 'Match in progress';
-    }
-
-    if (match.isSecondInnings) {
-      const battingTeam = match.battingTeam;
-      const bowlingTeam = match.bowlingTeam;
-      
-      if (battingTeam.score > match.firstInningsScore) {
-        const wicketsRemaining = 10 - battingTeam.wickets;
-        return `${battingTeam.name} won by ${wicketsRemaining} wickets`;
-      } else if (battingTeam.score < match.firstInningsScore) {
-        const runsMargin = match.firstInningsScore - battingTeam.score;
-        return `${bowlingTeam.name} won by ${runsMargin} runs`;
-      } else {
-        return 'Match tied';
+    battingBalls.forEach(ball => {
+      if (ball.striker.id === player.id) {
+        if (!ball.isWide && !ball.isNoBall && !ball.isBye && !ball.isLegBye) {
+          runsScored += ball.runs;
+        }
+        if (!ball.isWide && !ball.isNoBall) {
+          ballsFaced++;
+        }
+        if (ball.runs === 4) fours++;
+        if (ball.runs === 6) sixes++;
+        if (ball.isWicket) gotOut = true;
       }
+    });
+
+    // Batting score calculation
+    if (ballsFaced > 0) {
+      const strikeRate = (runsScored / ballsFaced) * 100;
+      
+      battingScore += runsScored * 1.5;
+      
+      if (strikeRate >= 150) battingScore += runsScored * 0.4;
+      else if (strikeRate >= 120) battingScore += runsScored * 0.2;
+      else if (strikeRate < 80 && ballsFaced >= 10) battingScore -= runsScored * 0.1;
+      
+      if (runsScored >= 100) battingScore += 50;
+      else if (runsScored >= 50) battingScore += 25;
+      else if (runsScored >= 30) battingScore += 10;
+      
+      battingScore += fours * 2;
+      battingScore += sixes * 4;
+      
+      if (!gotOut && runsScored >= 20) battingScore += 10;
+      if (gotOut && runsScored === 0) battingScore -= 10;
     }
 
-    return 'Match completed';
+    // Bowling Performance
+    const bowlingBalls = match.balls.filter(b => b.bowler.id === player.id);
+    let wicketsTaken = 0;
+    let runsConceded = 0;
+    let ballsBowled = 0;
+    let dotBalls = 0;
+
+    bowlingBalls.forEach(ball => {
+      if (!ball.isWide && !ball.isNoBall) {
+        ballsBowled++;
+        if (ball.runs === 0) dotBalls++;
+      }
+      if (ball.isWicket && ball.wicketType !== 'run_out') {
+        wicketsTaken++;
+      }
+      runsConceded += ball.runs;
+    });
+
+    if (ballsBowled > 0) {
+      const economyRate = (runsConceded / ballsBowled) * 6;
+      const dotBallPercentage = (dotBalls / ballsBowled) * 100;
+      
+      bowlingScore += wicketsTaken * 25;
+      
+      if (economyRate <= 4) bowlingScore += 20;
+      else if (economyRate <= 6) bowlingScore += 10;
+      else if (economyRate >= 10) bowlingScore -= 10;
+      
+      if (dotBallPercentage >= 60) bowlingScore += 15;
+      else if (dotBallPercentage >= 40) bowlingScore += 8;
+      
+      if (wicketsTaken >= 5) bowlingScore += 30;
+      else if (wicketsTaken >= 3) bowlingScore += 15;
+    }
+
+    // Fielding Performance
+    const catches = match.balls.filter(b => 
+      b.isWicket && b.wicketType === 'caught' && b.fielder?.id === player.id
+    ).length;
+    
+    const runOuts = match.balls.filter(b => 
+      b.isWicket && b.wicketType === 'run_out' && b.fielder?.id === player.id
+    ).length;
+
+    fieldingScore += catches * 8;
+    fieldingScore += runOuts * 12;
+
+    const totalScore = battingScore + bowlingScore + fieldingScore;
+
+    return {
+      playerId: player.id,
+      battingScore,
+      bowlingScore,
+      fieldingScore,
+      totalScore,
+      runsScored,
+      ballsFaced,
+      wicketsTaken,
+      catches,
+      runOuts
+    };
   }
 }

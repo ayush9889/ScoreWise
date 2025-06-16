@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, TrendingUp, Target, Award, Users, Download, Upload, User } from 'lucide-react';
+import { Trophy, TrendingUp, Target, Award, Users, Download, Upload, User, RefreshCw } from 'lucide-react';
 import { Player, Match } from '../types/cricket';
 import { PlayerDashboard } from './PlayerDashboard';
 import { storageService } from '../services/storage';
@@ -15,6 +15,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'batting' | 'bowling' | 'fielding' | 'matches'>('overview');
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -22,22 +23,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
 
   const loadData = async () => {
     try {
+      setRefreshing(true);
       const [allPlayers, allMatches] = await Promise.all([
         storageService.getAllPlayers(),
         storageService.getAllMatches()
       ]);
-      setPlayers(allPlayers.filter(p => p.isGroupMember));
-      setMatches(allMatches);
+      
+      // Filter for group members and sort by recent activity
+      const groupPlayers = allPlayers.filter(p => p.isGroupMember);
+      setPlayers(groupPlayers);
+      
+      // Sort matches by most recent first
+      const sortedMatches = allMatches.sort((a, b) => b.startTime - a.startTime);
+      setMatches(sortedMatches);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const handlePlayerUpdate = (updatedPlayer: Player) => {
     setPlayers(players.map(p => p.id === updatedPlayer.id ? updatedPlayer : p));
     setSelectedPlayer(updatedPlayer);
+  };
+
+  const handleRefresh = () => {
+    loadData();
   };
 
   const handleExport = async () => {
@@ -85,26 +98,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
     );
   }
 
-  // Leaderboard calculations
+  // Leaderboard calculations with updated stats
   const topRunScorers = [...players]
+    .filter(p => p.stats.matchesPlayed > 0)
     .sort((a, b) => b.stats.runsScored - a.stats.runsScored)
     .slice(0, 10);
 
   const topWicketTakers = [...players]
+    .filter(p => p.stats.matchesPlayed > 0)
     .sort((a, b) => b.stats.wicketsTaken - a.stats.wicketsTaken)
     .slice(0, 10);
 
   const bestAverages = [...players]
-    .filter(p => p.stats.timesOut > 0)
+    .filter(p => p.stats.timesOut > 0 && p.stats.matchesPlayed > 0)
     .sort((a, b) => CricketEngine.calculateBattingAverage(b.stats) - CricketEngine.calculateBattingAverage(a.stats))
     .slice(0, 10);
 
   const mostMOTM = [...players]
+    .filter(p => p.stats.matchesPlayed > 0)
     .sort((a, b) => b.stats.motmAwards - a.stats.motmAwards)
     .slice(0, 10);
 
   const recentMatches = [...matches]
-    .sort((a, b) => b.startTime - a.startTime)
+    .filter(m => m.isCompleted)
     .slice(0, 10);
 
   if (loading) {
@@ -132,6 +148,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
         <h1 className="font-bold text-xl text-gray-900">Group Dashboard</h1>
         
         <div className="flex items-center space-x-2">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+            title="Refresh Data"
+          >
+            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
           <button
             onClick={handleExport}
             className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -167,8 +191,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
           <div className="bg-white rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold text-gray-900">{matches.length}</div>
-                <div className="text-sm text-gray-600">Matches Played</div>
+                <div className="text-2xl font-bold text-gray-900">{matches.filter(m => m.isCompleted).length}</div>
+                <div className="text-sm text-gray-600">Completed Matches</div>
               </div>
               <Trophy className="w-8 h-8 text-blue-600" />
             </div>
@@ -513,6 +537,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
                     )}
                   </div>
                 ))}
+                
+                {recentMatches.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Trophy className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-lg font-medium">No completed matches yet</p>
+                    <p className="text-sm">Start playing matches to see statistics here</p>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -5,6 +5,7 @@ import { CompactScoreDisplay } from './CompactScoreDisplay';
 import { ScoringPanel } from './ScoringPanel';
 import { PlayerSelector } from './PlayerSelector';
 import { InningsBreakModal } from './InningsBreakModal';
+import { InningsSetupModal } from './InningsSetupModal';
 import { CricketEngine } from '../services/cricketEngine';
 import { storageService } from '../services/storage';
 import { ScorecardModal } from './ScorecardModal';
@@ -26,11 +27,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   // Match state
   const [match, setMatch] = useState<Match>(initialMatch);
   const [target, setTarget] = useState<number>(0);
-  const [remainingRuns, setRemainingRuns] = useState(0);
-  const [remainingBalls, setRemainingBalls] = useState(0);
-  const [actionHistory, setActionHistory] = useState<Match[]>([]);
-  const [redoStack, setRedoStack] = useState<Match[]>([]);
-  const [bowlerHistory, setBowlerHistory] = useState<Player[]>([]);
+  const [actionHistory, setActionHistory] = useState<Ball[]>([]);
+  const [redoStack, setRedoStack] = useState<Ball[]>([]);
 
   // UI state
   const [showMenu, setShowMenu] = useState(false);
@@ -42,7 +40,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const [showMatchSummary, setShowMatchSummary] = useState(false);
   const [showVictoryAnimation, setShowVictoryAnimation] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
-  const [showScoreInput, setShowScoreInput] = useState(false);
   const [showOverCompleteMessage, setShowOverCompleteMessage] = useState(false);
   const [overCompleteMessage, setOverCompleteMessage] = useState<string | null>(null);
   const [showScorecard, setShowScorecard] = useState(false);
@@ -55,8 +52,9 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [addPlayerType, setAddPlayerType] = useState<'batting' | 'bowling'>('batting');
-  const [extraRuns, setExtraRuns] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [needsBowlerChange, setNeedsBowlerChange] = useState(false);
+  const [needsNewBatsman, setNeedsNewBatsman] = useState(false);
 
   // Add new state for players
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
@@ -106,16 +104,10 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           const savedMatch = await cloudStorageService.getMatch(initialMatch.id);
           if (savedMatch) {
             setMatch(savedMatch);
-            // Initialize bowler history
-            const history = savedMatch.balls
-              .filter(b => b.bowler.id !== savedMatch.currentBowler?.id)
-              .map(b => b.bowler.id);
-            setBowlerHistory([...new Set(history)]);
           }
         }
       } catch (error) {
         console.error('Error loading match from cloud:', error);
-        // Don't show error to user for permission issues - just continue with local data
       }
     };
     loadMatch();
@@ -133,16 +125,12 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         setIsSaving(true);
         setSaveError(null);
         
-        // Use a wrapper to ensure no errors escape
         await cloudStorageService.saveMatch(match).catch((error) => {
-          // This catch should never be reached due to the service's error handling,
-          // but it's here as an extra safety net
           console.log('Cloud sync temporarily unavailable, continuing in offline mode');
         });
         
-        setRetryCount(0); // Reset retry count on successful save
+        setRetryCount(0);
       } catch (error) {
-        // This should never be reached due to the service's error handling
         console.log('Unexpected error during save operation, continuing in offline mode');
       } finally {
         setIsSaving(false);
@@ -156,17 +144,15 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     if (match.isSecondInnings) {
       const totalBalls = match.totalOvers * 6;
       const ballsBowled = (match.battingTeam.overs * 6) + match.battingTeam.balls;
-      setRemainingBalls(totalBalls - ballsBowled);
-      setRemainingRuns(target - match.battingTeam.score);
+      setTarget(match.firstInningsScore + 1);
     }
-  }, [match.battingTeam.score, match.battingTeam.overs, match.battingTeam.balls, target]);
+  }, [match.battingTeam.score, match.battingTeam.overs, match.battingTeam.balls, match.isSecondInnings, match.firstInningsScore]);
 
   // Update player stats after match completion
   useEffect(() => {
     const updatePlayerStats = async () => {
       if (match.isCompleted) {
         try {
-          // Update stats for all players who participated
           const allMatchPlayers = [...match.team1.players, ...match.team2.players];
           
           for (const player of allMatchPlayers) {
@@ -192,124 +178,106 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const handleInningsBreakContinue = () => {
     const updatedMatch = { ...match };
     updatedMatch.isSecondInnings = true;
-    updatedMatch.battingTeam = match.bowlingTeam;
-    updatedMatch.bowlingTeam = match.battingTeam;
-    updatedMatch.firstInningsScore = match.battingTeam.score;
-    setTarget(match.battingTeam.score + 1);
+    
+    // Swap teams
+    const temp = updatedMatch.battingTeam;
+    updatedMatch.battingTeam = updatedMatch.bowlingTeam;
+    updatedMatch.bowlingTeam = temp;
+    
+    updatedMatch.firstInningsScore = temp.score;
+    setTarget(temp.score + 1);
+    
+    // Reset batting team stats
     updatedMatch.battingTeam.score = 0;
     updatedMatch.battingTeam.overs = 0;
     updatedMatch.battingTeam.balls = 0;
     updatedMatch.battingTeam.wickets = 0;
     updatedMatch.battingTeam.extras = { wides: 0, noBalls: 0, byes: 0, legByes: 0 };
+    
     // Clear current players for new selection
     updatedMatch.currentStriker = undefined;
     updatedMatch.currentNonStriker = undefined;
     updatedMatch.currentBowler = undefined;
+    
     setMatch(updatedMatch);
     setShowInningsBreak(false);
     setShowInningsSetup(true);
     setIsSecondInningsSetup(true);
   };
 
-  const handleInningsSetup = () => {
-    setShowInningsSetup(false);
-    setShowBatsmanSelector(true);
-  };
-
-  const handleBatsmanSelect = (player: Player) => {
+  const handleInningsSetup = (striker: Player, nonStriker: Player, bowler: Player) => {
     const updatedMatch = { ...match };
-    if (!updatedMatch.currentStriker) {
-      updatedMatch.currentStriker = player;
-    } else if (!updatedMatch.currentNonStriker) {
-      updatedMatch.currentNonStriker = player;
-      setShowBatsmanSelector(false);
-      setShowBowlerSelector(true);
+    updatedMatch.currentStriker = striker;
+    updatedMatch.currentNonStriker = nonStriker;
+    updatedMatch.currentBowler = bowler;
+
+    // Add players to their respective teams if not already present
+    if (!updatedMatch.battingTeam.players.find(p => p.id === striker.id)) {
+      updatedMatch.battingTeam.players.push(striker);
     }
-    setMatch(updatedMatch);
-  };
+    if (!updatedMatch.battingTeam.players.find(p => p.id === nonStriker.id)) {
+      updatedMatch.battingTeam.players.push(nonStriker);
+    }
+    if (!updatedMatch.bowlingTeam.players.find(p => p.id === bowler.id)) {
+      updatedMatch.bowlingTeam.players.push(bowler);
+    }
 
-  const handleBowlerSelect = (player: Player) => {
-    const updatedMatch = { ...match };
-    updatedMatch.currentBowler = player;
     setMatch(updatedMatch);
-    setShowBowlerSelector(false);
+    setShowInningsSetup(false);
     setIsSecondInningsSetup(false);
   };
 
   const handleMatchComplete = () => {
+    const updatedMatch = { ...match };
+    updatedMatch.isCompleted = true;
+    updatedMatch.endTime = Date.now();
+    updatedMatch.winner = CricketEngine.getMatchResult(updatedMatch);
+    
+    // Calculate Man of the Match
+    const motm = CricketEngine.calculateManOfTheMatch(updatedMatch);
+    if (motm) {
+      updatedMatch.manOfTheMatch = motm;
+    }
+    
+    setMatch(updatedMatch);
     setShowVictoryAnimation(true);
+    
     setTimeout(() => {
-      setShowMatchSummary(true);
       setShowVictoryAnimation(false);
+      onMatchComplete(updatedMatch);
     }, 3000);
   };
 
   const handleScoreUpdate = (ball: Ball) => {
-    const updatedMatch = { ...match };
-    
-    // Add ball to history
-    updatedMatch.balls.push(ball);
+    // Add to action history for undo functionality
     setActionHistory([...actionHistory, ball]);
+    setRedoStack([]); // Clear redo stack when new action is performed
 
-    // Update batting team score
-    updatedMatch.battingTeam.score += ball.runs;
-
-    // Handle extras
-    if (ball.isWide) {
-      updatedMatch.battingTeam.extras.wides++;
-      if (ball.runs > 1) {
-        updatedMatch.battingTeam.score += ball.runs - 1;
-      }
-    } else if (ball.isNoBall) {
-      updatedMatch.battingTeam.extras.noBalls++;
-      if (ball.runs > 1) {
-        const strikerBalls = updatedMatch.balls.filter(b => b.striker.id === ball.striker.id);
-        const strikerRuns = strikerBalls.reduce((sum, b) => sum + b.runs, 0);
-        const lastBall = updatedMatch.balls[updatedMatch.balls.length - 1];
-        lastBall.runs = ball.runs;
-      }
-    } else if (ball.isBye) {
-      updatedMatch.battingTeam.extras.byes += ball.runs;
-      updatedMatch.battingTeam.score += ball.runs;
-    } else if (ball.isLegBye) {
-      updatedMatch.battingTeam.extras.legByes += ball.runs;
-      updatedMatch.battingTeam.score += ball.runs;
-    }
-
-    // Handle wickets
-    if (ball.isWicket) {
-      updatedMatch.battingTeam.wickets++;
-    }
+    // Process the ball using cricket engine
+    let updatedMatch = CricketEngine.processBall(match, ball);
 
     // Check if over is complete
-    if (!ball.isWide && !ball.isNoBall) {
-      updatedMatch.battingTeam.balls++;
+    const isOverComplete = CricketEngine.isOverComplete(updatedMatch);
+    
+    if (isOverComplete) {
+      setOverCompleteMessage(`Over ${updatedMatch.battingTeam.overs} completed!`);
+      setNeedsBowlerChange(true);
       
-      if (updatedMatch.battingTeam.balls >= 6) {
-        updatedMatch.battingTeam.overs++;
-        updatedMatch.battingTeam.balls = 0;
-        
-        setOverCompleteMessage(`Over ${updatedMatch.battingTeam.overs} completed!`);
-        setPendingStrikeRotation(true);
-        
-        // Force bowler change after over completion
-        const availableBowlers = CricketEngine.getAvailableBowlers(updatedMatch, updatedMatch.battingTeam.overs + 1);
-        // Filter out current batsmen from available bowlers
-        const currentBatsmen = [updatedMatch.currentStriker?.id, updatedMatch.currentNonStriker?.id];
-        const eligibleBowlers = availableBowlers.filter(b => !currentBatsmen.includes(b.id));
-        
-        if (eligibleBowlers.length > 0) {
-          setShowBowlerSelector(true);
-        } else {
-          const shouldAddBowler = window.confirm(
-            'No other bowlers available for the next over! Would you like to add more bowlers to the team?'
-          );
-          if (shouldAddBowler) {
-            setAddPlayerType('bowling');
-            setShowAddPlayerModal(true);
-          }
-        }
+      // Get available bowlers for next over
+      const availableBowlers = CricketEngine.getAvailableBowlers(updatedMatch, updatedMatch.battingTeam.overs + 1);
+      
+      if (availableBowlers.length === 0) {
+        setAddPlayerType('bowling');
+        setShowAddPlayerModal(true);
+      } else {
+        setShowBowlerSelector(true);
       }
+    }
+
+    // Check for wicket - need new batsman
+    if (ball.isWicket) {
+      setNeedsNewBatsman(true);
+      setShowNewBatsmanSelector(true);
     }
 
     // Check for innings completion
@@ -317,23 +285,11 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       if (!updatedMatch.isSecondInnings) {
         handleInningsTransition();
       } else {
-        updatedMatch.isCompleted = true;
-        updatedMatch.winner = CricketEngine.getMatchResult(updatedMatch);
         handleMatchComplete();
       }
     }
 
-    // Update bowler history
-    if (ball.bowler.id !== updatedMatch.currentBowler?.id) {
-      setBowlerHistory(prev => [...prev, ball.bowler.id]);
-    }
-
     setMatch(updatedMatch);
-  };
-
-  const handleStrikeRotation = () => {
-    setPendingStrikeRotation(false);
-    // Strike rotation will be handled by the ScoringPanel component
   };
 
   const handleBowlerChange = (newBowler: Player) => {
@@ -348,18 +304,24 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     
     setMatch(updatedMatch);
     setShowBowlerSelector(false);
+    setNeedsBowlerChange(false);
     setOverCompleteMessage(null);
   };
 
   const handleNewBatsman = (newBatsman: Player) => {
-    // Add new batsman to batting team if not already present
     const updatedMatch = { ...match };
+    
+    // Replace the out batsman (striker) with new batsman
+    updatedMatch.currentStriker = newBatsman;
+    
+    // Add new batsman to batting team if not already present
     if (!updatedMatch.battingTeam.players.find(p => p.id === newBatsman.id)) {
       updatedMatch.battingTeam.players.push(newBatsman);
     }
     
     setMatch(updatedMatch);
     setShowNewBatsmanSelector(false);
+    setNeedsNewBatsman(false);
   };
 
   const handleUndo = () => {
@@ -368,10 +330,10 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     const lastBall = actionHistory[actionHistory.length - 1];
     const updatedMatch = { ...match };
 
-    // Remove last ball
-    updatedMatch.balls = updatedMatch.balls.slice(0, -1);
+    // Remove last ball from match
+    updatedMatch.balls = updatedMatch.balls.filter(b => b.id !== lastBall.id);
 
-    // Revert score
+    // Revert score changes
     updatedMatch.battingTeam.score -= lastBall.runs;
 
     // Revert extras
@@ -390,9 +352,9 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       updatedMatch.battingTeam.wickets--;
     }
 
-    // Revert ball count
+    // Revert ball count and overs
     if (!lastBall.isWide && !lastBall.isNoBall) {
-      if (updatedMatch.battingTeam.balls === 0) {
+      if (updatedMatch.battingTeam.balls === 0 && updatedMatch.battingTeam.overs > 0) {
         updatedMatch.battingTeam.overs--;
         updatedMatch.battingTeam.balls = 5;
       } else {
@@ -402,8 +364,11 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
 
     setMatch(updatedMatch);
     setActionHistory(actionHistory.slice(0, -1));
+    setRedoStack([lastBall, ...redoStack]);
     setPendingStrikeRotation(false);
     setOverCompleteMessage(null);
+    setNeedsBowlerChange(false);
+    setNeedsNewBatsman(false);
   };
 
   const getAvailableBowlers = (): Player[] => {
@@ -411,12 +376,11 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     return CricketEngine.getAvailableBowlers(match, currentOver);
   };
 
-  const handleMotmSelect = (player: Player) => {
-    const updatedMatch = { ...match };
-    updatedMatch.manOfTheMatch = player;
-    setMatch(updatedMatch);
-    setShowBowlerSelector(false);
-    onMatchComplete(updatedMatch);
+  const getAvailableBatsmen = (): Player[] => {
+    return match.battingTeam.players.filter(p => 
+      p.id !== match.currentStriker?.id && 
+      p.id !== match.currentNonStriker?.id
+    );
   };
 
   const handleAddPlayer = (player: Player) => {
@@ -472,7 +436,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       </div>
 
       {/* Over Complete Message */}
-      {overCompleteMessage && (
+      {overCompleteMessage && needsBowlerChange && (
         <div className="bg-green-100 border-l-4 border-green-500 p-2 m-2">
           <div className="flex items-center">
             <AlertCircle className="w-4 h-4 text-green-600 mr-1" />
@@ -481,24 +445,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           <p className="text-green-600 text-xs mt-1">
             Strike rotated. Please select new bowler to continue.
           </p>
-        </div>
-      )}
-
-      {/* Strike Rotation Alert */}
-      {pendingStrikeRotation && !overCompleteMessage && (
-        <div className="bg-blue-100 border-l-4 border-blue-500 p-2 m-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <RefreshCw className="w-4 h-4 text-blue-600 mr-1" />
-              <p className="text-blue-700 text-sm font-semibold">Strike Rotated</p>
-            </div>
-            <button
-              onClick={handleStrikeRotation}
-              className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs hover:bg-blue-700"
-            >
-              Continue
-            </button>
-          </div>
         </div>
       )}
 
@@ -512,7 +458,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           onUndo={handleUndo}
           canUndo={actionHistory.length > 0}
           pendingStrikeRotation={pendingStrikeRotation}
-          onStrikeRotation={handleStrikeRotation}
+          onStrikeRotation={() => setPendingStrikeRotation(false)}
         />
 
         {/* Recent Balls */}
@@ -523,7 +469,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
               {match.balls.slice(-5).reverse().map((ball, index) => (
                 <div key={ball.id} className="flex justify-between items-center py-1 border-b border-gray-100 last:border-b-0 text-xs">
                   <div className="text-gray-600">
-                    {ball.overNumber}.{ball.ballNumber % 6 || 6}
+                    {ball.overNumber}.{((ball.ballNumber - 1) % 6) + 1}
                   </div>
                   <div className="flex-1 mx-2">{ball.commentary}</div>
                   <div className="font-semibold">
@@ -546,6 +492,17 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         )}
       </AnimatePresence>
 
+      {/* Innings Setup Modal */}
+      {showInningsSetup && (
+        <InningsSetupModal
+          match={match}
+          isOpen={showInningsSetup}
+          onClose={() => setShowInningsSetup(false)}
+          onSetupComplete={handleInningsSetup}
+          isSecondInnings={isSecondInningsSetup}
+        />
+      )}
+
       {/* Bowler Selector Modal */}
       {showBowlerSelector && (
         <PlayerSelector
@@ -554,11 +511,9 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           onClose={() => {
             setShowBowlerSelector(false);
             setOverCompleteMessage(null);
+            setNeedsBowlerChange(false);
           }}
-          players={getAvailableBowlers().filter(b => 
-            b.id !== match.currentBowler?.id && 
-            b.id !== match.previousBowler?.id
-          )}
+          players={getAvailableBowlers()}
           showOnlyAvailable={true}
           allowAddPlayer={true}
           groupId={currentGroup?.id}
@@ -570,8 +525,11 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         <PlayerSelector
           title="Select New Batsman"
           onPlayerSelect={handleNewBatsman}
-          onClose={() => setShowNewBatsmanSelector(false)}
-          players={match.battingTeam.players}
+          onClose={() => {
+            setShowNewBatsmanSelector(false);
+            setNeedsNewBatsman(false);
+          }}
+          players={getAvailableBatsmen()}
           showOnlyAvailable={true}
           allowAddPlayer={true}
           groupId={currentGroup?.id}
@@ -601,18 +559,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         </motion.div>
       )}
 
-      {/* MOTM Selector Modal */}
-      {showMotmSelector && (
-        <PlayerSelector
-          title="Select Man of the Match"
-          onPlayerSelect={handleMotmSelect}
-          onClose={() => setShowMotmSelector(false)}
-          players={[...match.team1.players, ...match.team2.players]}
-          showOnlyAvailable={false}
-          allowAddPlayer={false}
-        />
-      )}
-
       {/* Add Player Modal */}
       {showAddPlayerModal && (
         <PlayerSelector
@@ -627,44 +573,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       )}
 
       <AnimatePresence>
-        {showInningsSetup && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          >
-            <div className="bg-white rounded-lg p-8 w-full max-w-2xl">
-              <h2 className="text-2xl font-bold mb-6">Second Innings Setup</h2>
-              
-              <div className="space-y-6">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2">First Innings Summary</h3>
-                  <p className="text-gray-600">
-                    {match.bowlingTeam.name} scored {match.firstInningsScore} runs
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2">Target</h3>
-                  <p className="text-2xl font-bold text-green-600">
-                    {target} runs to win
-                  </p>
-                </div>
-
-                <div className="flex justify-end space-x-4">
-                  <button
-                    onClick={handleInningsSetup}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Start Second Innings
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
         {showVictoryAnimation && (
           <motion.div
             initial={{ scale: 0 }}
@@ -685,72 +593,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
               </motion.div>
             </div>
           </motion.div>
-        )}
-
-        {showMatchSummary && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          >
-            <div className="bg-white rounded-lg p-8 w-full max-w-2xl">
-              <h2 className="text-2xl font-bold mb-4">Match Summary</h2>
-              <div className="space-y-4">
-                <p className="text-xl font-semibold">{CricketEngine.getMatchResult(match)}</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="font-semibold mb-2">First Innings</h3>
-                    <p>{match.battingTeam.name}: {match.firstInningsScore}</p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold mb-2">Second Innings</h3>
-                    <p>{match.bowlingTeam.name}: {match.bowlingTeam.score}</p>
-                  </div>
-                </div>
-                {!match.manOfTheMatch && (
-                  <div className="mt-4">
-                    <h3 className="font-semibold mb-2">Select Man of the Match</h3>
-                    <PlayerSelector
-                      title="Man of the Match"
-                      onPlayerSelect={(player) => {
-                        const updatedMatch = { ...match, manOfTheMatch: player };
-                        setMatch(updatedMatch);
-                        onMatchComplete(updatedMatch);
-                      }}
-                      onClose={() => setShowMatchSummary(false)}
-                      players={[...match.battingTeam.players, ...match.bowlingTeam.players]}
-                      showOnlyAvailable={false}
-                      allowAddPlayer={false}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {showBatsmanSelector && (
-          <PlayerSelector
-            title="Select Opening Batsmen"
-            onPlayerSelect={handleBatsmanSelect}
-            onClose={() => setShowBatsmanSelector(false)}
-            players={match.battingTeam.players}
-            showOnlyAvailable={true}
-            allowAddPlayer={true}
-            groupId={currentGroup?.id}
-          />
-        )}
-
-        {showBowlerSelector && (
-          <PlayerSelector
-            title="Select Opening Bowler"
-            onPlayerSelect={handleBowlerSelect}
-            onClose={() => setShowBowlerSelector(false)}
-            players={match.bowlingTeam.players}
-            showOnlyAvailable={true}
-            allowAddPlayer={true}
-            groupId={currentGroup?.id}
-          />
         )}
       </AnimatePresence>
 
