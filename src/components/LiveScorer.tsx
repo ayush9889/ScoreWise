@@ -517,7 +517,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
             setShowBowlerSelector(false);
             setOverCompleteMessage(null);
           }}
-          availablePlayers={getAvailableBowlers().filter(b => 
+          players={getAvailableBowlers().filter(b => 
             b.id !== match.currentBowler?.id && 
             b.id !== match.previousBowler?.id
           )}
@@ -576,7 +576,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           title={`Add ${addPlayerType === 'batting' ? 'Batsman' : 'Bowler'}`}
           onPlayerSelect={handleAddPlayer}
           onClose={() => setShowAddPlayerModal(false)}
-          availablePlayers={[]} // Empty array to show all players
+          players={allPlayers}
           showOnlyAvailable={false}
         />
       )}
@@ -687,7 +687,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
                         onMatchComplete(updatedMatch);
                       }}
                       onClose={() => setShowMatchSummary(false)}
-                      availablePlayers={[...match.battingTeam.players, ...match.bowlingTeam.players]}
+                      players={[...match.battingTeam.players, ...match.bowlingTeam.players]}
                       showOnlyAvailable={false}
                     />
                   </div>

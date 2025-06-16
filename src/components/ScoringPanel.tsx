@@ -168,6 +168,20 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
     setShowPlayerSelector(null);
   };
 
+  const getPlayersForSelector = (type: string): Player[] => {
+    switch (type) {
+      case 'striker':
+      case 'nonStriker':
+        return match.battingTeam.players || [];
+      case 'bowler':
+        return match.bowlingTeam.players || [];
+      case 'fielder':
+        return match.bowlingTeam.players || [];
+      default:
+        return [];
+    }
+  };
+
   const getExcludedPlayerIds = (type: string): string[] => {
     const excluded: string[] = [];
     if (type === 'striker' && nonStriker) excluded.push(nonStriker.id);
@@ -399,6 +413,7 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
           title={showPlayerSelector.title}
           onPlayerSelect={handlePlayerSelect}
           onClose={() => setShowPlayerSelector(null)}
+          players={getPlayersForSelector(showPlayerSelector.type)}
           excludePlayerIds={getExcludedPlayerIds(showPlayerSelector.type)}
         />
       )}
