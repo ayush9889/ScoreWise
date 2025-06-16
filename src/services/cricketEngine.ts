@@ -106,7 +106,23 @@ export class CricketEngine {
     return true;
   }
 
-  // Get available bowlers with ABSOLUTE filtering
+  // CRITICAL: Check if player can play for a team (no cross-team participation)
+  static canPlayerPlayForTeam(player: Player, team: Team, opposingTeam: Team): boolean {
+    console.log(`🏏 CHECKING: Can ${player.name} play for ${team.name}?`);
+    
+    // Check if player has already played for the opposing team
+    const hasPlayedForOpposingTeam = opposingTeam.players.some(p => p.id === player.id);
+    
+    if (hasPlayedForOpposingTeam) {
+      console.log(`❌ REJECTED: ${player.name} has already played for ${opposingTeam.name}. Cross-team participation not allowed!`);
+      return false;
+    }
+    
+    console.log(`✅ ALLOWED: ${player.name} can play for ${team.name}`);
+    return true;
+  }
+
+  // Get available bowlers with ABSOLUTE filtering and team restrictions
   static getAvailableBowlers(match: Match, nextOver: number): Player[] {
     console.log(`\n🏏 GETTING AVAILABLE BOWLERS FOR OVER ${nextOver}`);
     
@@ -117,7 +133,8 @@ export class CricketEngine {
       // First over - exclude current batsmen only
       const available = allBowlers.filter(bowler => 
         bowler.id !== match.currentStriker?.id &&
-        bowler.id !== match.currentNonStriker?.id
+        bowler.id !== match.currentNonStriker?.id &&
+        this.canPlayerPlayForTeam(bowler, match.bowlingTeam, match.battingTeam)
       );
       console.log(`✅ First over - Available bowlers:`, available.map(b => b.name));
       return available;
@@ -133,7 +150,8 @@ export class CricketEngine {
       console.log(`⚠️ No balls found in previous over ${previousOver}`);
       const available = allBowlers.filter(bowler => 
         bowler.id !== match.currentStriker?.id &&
-        bowler.id !== match.currentNonStriker?.id
+        bowler.id !== match.currentNonStriker?.id &&
+        this.canPlayerPlayForTeam(bowler, match.bowlingTeam, match.battingTeam)
       );
       console.log(`✅ Available bowlers (no previous over):`, available.map(b => b.name));
       return available;
@@ -144,14 +162,15 @@ export class CricketEngine {
     
     console.log(`🚫 Previous over ${previousOver} bowled by: ${previousBowlerName} (EXCLUDED)`);
     
-    // ABSOLUTE FILTERING: Exclude previous bowler and current batsmen
+    // ABSOLUTE FILTERING: Exclude previous bowler, current batsmen, and enforce team restrictions
     const availableBowlers = allBowlers.filter(bowler => {
       const isNotPreviousBowler = bowler.id !== previousBowlerId;
       const isNotCurrentBatsman = bowler.id !== match.currentStriker?.id && bowler.id !== match.currentNonStriker?.id;
+      const canPlayForTeam = this.canPlayerPlayForTeam(bowler, match.bowlingTeam, match.battingTeam);
       
-      const isAvailable = isNotPreviousBowler && isNotCurrentBatsman;
+      const isAvailable = isNotPreviousBowler && isNotCurrentBatsman && canPlayForTeam;
       
-      console.log(`🔍 ${bowler.name}: Previous bowler? ${!isNotPreviousBowler}, Current batsman? ${!isNotCurrentBatsman}, Available? ${isAvailable}`);
+      console.log(`🔍 ${bowler.name}: Previous bowler? ${!isNotPreviousBowler}, Current batsman? ${!isNotCurrentBatsman}, Team eligible? ${canPlayForTeam}, Available? ${isAvailable}`);
       
       return isAvailable;
     });
@@ -163,6 +182,29 @@ export class CricketEngine {
     }
     
     return availableBowlers;
+  }
+
+  // Get available batsmen with team restrictions
+  static getAvailableBatsmen(match: Match): Player[] {
+    console.log(`🏏 GETTING AVAILABLE BATSMEN`);
+    
+    const allBatsmen = match.battingTeam.players;
+    console.log(`📋 All batsmen in team:`, allBatsmen.map(b => b.name));
+    
+    // Filter out current batsmen and enforce team restrictions
+    const availableBatsmen = allBatsmen.filter(batsman => {
+      const isNotCurrentBatsman = batsman.id !== match.currentStriker?.id && batsman.id !== match.currentNonStriker?.id;
+      const canPlayForTeam = this.canPlayerPlayForTeam(batsman, match.battingTeam, match.bowlingTeam);
+      
+      const isAvailable = isNotCurrentBatsman && canPlayForTeam;
+      
+      console.log(`🔍 ${batsman.name}: Current batsman? ${!isNotCurrentBatsman}, Team eligible? ${canPlayForTeam}, Available? ${isAvailable}`);
+      
+      return isAvailable;
+    });
+
+    console.log(`✅ AVAILABLE BATSMEN:`, availableBatsmen.map(b => b.name));
+    return availableBatsmen;
   }
 
   // Process ball and update match state with STRICT over completion checking
@@ -233,6 +275,61 @@ export class CricketEngine {
       }
     }
     
+    return updatedMatch;
+  }
+
+  // Undo last ball with proper state restoration
+  static undoLastBall(match: Match): Match {
+    if (match.balls.length === 0) {
+      console.log(`❌ Cannot undo: No balls to undo`);
+      return match;
+    }
+
+    const updatedMatch = { ...match };
+    const lastBall = updatedMatch.balls.pop()!;
+    
+    console.log(`🔄 UNDOING BALL: ${lastBall.commentary}`);
+    
+    // Revert score
+    updatedMatch.battingTeam.score -= lastBall.runs;
+    
+    // Revert extras
+    if (lastBall.isWide) {
+      updatedMatch.battingTeam.extras.wides--;
+    } else if (lastBall.isNoBall) {
+      updatedMatch.battingTeam.extras.noBalls--;
+    } else if (lastBall.isBye) {
+      updatedMatch.battingTeam.extras.byes -= lastBall.runs;
+    } else if (lastBall.isLegBye) {
+      updatedMatch.battingTeam.extras.legByes -= lastBall.runs;
+    }
+    
+    // Revert wickets
+    if (lastBall.isWicket) {
+      updatedMatch.battingTeam.wickets--;
+    }
+    
+    // Revert ball count and overs
+    if (!lastBall.isWide && !lastBall.isNoBall) {
+      if (updatedMatch.battingTeam.balls === 0 && updatedMatch.battingTeam.overs > 0) {
+        updatedMatch.battingTeam.overs--;
+        updatedMatch.battingTeam.balls = 5;
+        
+        // Restore previous bowler if over was completed
+        if (updatedMatch.previousBowler) {
+          updatedMatch.currentBowler = updatedMatch.previousBowler;
+          updatedMatch.previousBowler = undefined;
+        }
+      } else {
+        updatedMatch.battingTeam.balls--;
+      }
+    }
+    
+    // Restore striker/non-striker positions
+    updatedMatch.currentStriker = lastBall.striker;
+    updatedMatch.currentNonStriker = lastBall.nonStriker;
+    
+    console.log(`✅ BALL UNDONE: Match state restored`);
     return updatedMatch;
   }
 

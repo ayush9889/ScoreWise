@@ -6,6 +6,7 @@ import { ScoringPanel } from './ScoringPanel';
 import { PlayerSelector } from './PlayerSelector';
 import { InningsBreakModal } from './InningsBreakModal';
 import { InningsSetupModal } from './InningsSetupModal';
+import { RunOutModal } from './RunOutModal';
 import { CricketEngine } from '../services/cricketEngine';
 import { storageService } from '../services/storage';
 import { ScorecardModal } from './ScorecardModal';
@@ -44,6 +45,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const [overCompleteMessage, setOverCompleteMessage] = useState<string | null>(null);
   const [showScorecard, setShowScorecard] = useState(false);
   const [showMotmSelector, setShowMotmSelector] = useState(false);
+  const [showRunOutModal, setShowRunOutModal] = useState(false);
+  const [pendingRunOutBall, setPendingRunOutBall] = useState<Ball | null>(null);
 
   // Game state
   const [pendingStrikeRotation, setPendingStrikeRotation] = useState(false);
@@ -232,6 +235,23 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
 
   const handleInningsSetup = (striker: Player, nonStriker: Player, bowler: Player) => {
     const updatedMatch = { ...match };
+    
+    // CRITICAL: Validate team restrictions before setting players
+    if (!CricketEngine.canPlayerPlayForTeam(striker, updatedMatch.battingTeam, updatedMatch.bowlingTeam)) {
+      alert(`❌ ${striker.name} cannot play for ${updatedMatch.battingTeam.name} as they have already played for ${updatedMatch.bowlingTeam.name}!`);
+      return;
+    }
+    
+    if (!CricketEngine.canPlayerPlayForTeam(nonStriker, updatedMatch.battingTeam, updatedMatch.bowlingTeam)) {
+      alert(`❌ ${nonStriker.name} cannot play for ${updatedMatch.battingTeam.name} as they have already played for ${updatedMatch.bowlingTeam.name}!`);
+      return;
+    }
+    
+    if (!CricketEngine.canPlayerPlayForTeam(bowler, updatedMatch.bowlingTeam, updatedMatch.battingTeam)) {
+      alert(`❌ ${bowler.name} cannot play for ${updatedMatch.bowlingTeam.name} as they have already played for ${updatedMatch.battingTeam.name}!`);
+      return;
+    }
+    
     updatedMatch.currentStriker = striker;
     updatedMatch.currentNonStriker = nonStriker;
     updatedMatch.currentBowler = bowler;
@@ -276,6 +296,13 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
 
   const handleScoreUpdate = (ball: Ball) => {
     console.log(`\n🏏 PROCESSING BALL: ${ball.runs} runs by ${ball.striker.name} off ${ball.bowler.name}`);
+    
+    // Special handling for run-out
+    if (ball.isWicket && ball.wicketType === 'run_out') {
+      setPendingRunOutBall(ball);
+      setShowRunOutModal(true);
+      return;
+    }
     
     // Add to action history for undo functionality
     setActionHistory([...actionHistory, ball]);
@@ -334,10 +361,52 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     setMatch(updatedMatch);
   };
 
+  const handleRunOutComplete = (outBatsman: Player, newStriker: Player) => {
+    if (!pendingRunOutBall) return;
+    
+    console.log(`🏏 RUN OUT COMPLETED: ${outBatsman.name} is out, ${newStriker.name} is new striker`);
+    
+    // Update the ball with the correct out batsman
+    const updatedBall = {
+      ...pendingRunOutBall,
+      striker: outBatsman // The batsman who got out
+    };
+    
+    // Add to action history
+    setActionHistory([...actionHistory, updatedBall]);
+    setRedoStack([]);
+
+    // Process the ball
+    let updatedMatch = CricketEngine.processBall(match, updatedBall);
+    
+    // Set the new striker
+    updatedMatch.currentStriker = newStriker;
+    
+    setMatch(updatedMatch);
+    setShowRunOutModal(false);
+    setPendingRunOutBall(null);
+    setNeedsNewBatsman(false);
+    
+    // Check for innings completion
+    if (CricketEngine.isInningsComplete(updatedMatch)) {
+      if (!updatedMatch.isSecondInnings) {
+        handleInningsTransition();
+      } else {
+        handleMatchComplete();
+      }
+    }
+  };
+
   const handleBowlerChange = (newBowler: Player) => {
     console.log(`\n🏏 ATTEMPTING BOWLER CHANGE TO: ${newBowler.name}`);
     
     const updatedMatch = { ...match };
+    
+    // CRITICAL: Validate team restrictions
+    if (!CricketEngine.canPlayerPlayForTeam(newBowler, updatedMatch.bowlingTeam, updatedMatch.battingTeam)) {
+      alert(`❌ TEAM RESTRICTION VIOLATION!\n\n${newBowler.name} cannot bowl for ${updatedMatch.bowlingTeam.name} as they have already played for ${updatedMatch.battingTeam.name}!\n\nPlayers cannot switch teams during a match.`);
+      return;
+    }
     
     // ABSOLUTE VALIDATION: Check if this bowler can bowl the next over
     const nextOver = updatedMatch.battingTeam.overs + 1;
@@ -374,6 +443,12 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const handleNewBatsman = (newBatsman: Player) => {
     const updatedMatch = { ...match };
     
+    // CRITICAL: Validate team restrictions
+    if (!CricketEngine.canPlayerPlayForTeam(newBatsman, updatedMatch.battingTeam, updatedMatch.bowlingTeam)) {
+      alert(`❌ TEAM RESTRICTION VIOLATION!\n\n${newBatsman.name} cannot bat for ${updatedMatch.battingTeam.name} as they have already played for ${updatedMatch.bowlingTeam.name}!\n\nPlayers cannot switch teams during a match.`);
+      return;
+    }
+    
     // Replace the out batsman (striker) with new batsman
     updatedMatch.currentStriker = newBatsman;
     
@@ -390,48 +465,24 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const handleUndo = () => {
     if (actionHistory.length === 0) return;
 
+    console.log(`🔄 UNDOING LAST BALL`);
+    
+    // Use cricket engine to undo the last ball
+    const updatedMatch = CricketEngine.undoLastBall(match);
+    
+    // Update action history
     const lastBall = actionHistory[actionHistory.length - 1];
-    const updatedMatch = { ...match };
-
-    // Remove last ball from match
-    updatedMatch.balls = updatedMatch.balls.filter(b => b.id !== lastBall.id);
-
-    // Revert score changes
-    updatedMatch.battingTeam.score -= lastBall.runs;
-
-    // Revert extras
-    if (lastBall.isWide) {
-      updatedMatch.battingTeam.extras.wides--;
-    } else if (lastBall.isNoBall) {
-      updatedMatch.battingTeam.extras.noBalls--;
-    } else if (lastBall.isBye) {
-      updatedMatch.battingTeam.extras.byes -= lastBall.runs;
-    } else if (lastBall.isLegBye) {
-      updatedMatch.battingTeam.extras.legByes -= lastBall.runs;
-    }
-
-    // Revert wickets
-    if (lastBall.isWicket) {
-      updatedMatch.battingTeam.wickets--;
-    }
-
-    // Revert ball count and overs
-    if (!lastBall.isWide && !lastBall.isNoBall) {
-      if (updatedMatch.battingTeam.balls === 0 && updatedMatch.battingTeam.overs > 0) {
-        updatedMatch.battingTeam.overs--;
-        updatedMatch.battingTeam.balls = 5;
-      } else {
-        updatedMatch.battingTeam.balls--;
-      }
-    }
-
-    setMatch(updatedMatch);
     setActionHistory(actionHistory.slice(0, -1));
     setRedoStack([lastBall, ...redoStack]);
+    
+    // Clear any pending states
     setPendingStrikeRotation(false);
     setOverCompleteMessage(null);
     setNeedsBowlerChange(false);
     setNeedsNewBatsman(false);
+    
+    setMatch(updatedMatch);
+    console.log(`✅ UNDO COMPLETED`);
   };
 
   const getAvailableBowlers = (): Player[] => {
@@ -445,10 +496,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   };
 
   const getAvailableBatsmen = (): Player[] => {
-    return match.battingTeam.players.filter(p => 
-      p.id !== match.currentStriker?.id && 
-      p.id !== match.currentNonStriker?.id
-    );
+    return CricketEngine.getAvailableBatsmen(match);
   };
 
   const handleAddPlayer = (player: Player) => {
@@ -506,14 +554,22 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       {/* CRITICAL: Over Complete Message with MANDATORY Bowler Change */}
       {overCompleteMessage && needsBowlerChange && (
         <div className="bg-red-100 border-l-4 border-red-500 p-3 m-2">
-          <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
-            <div>
-              <p className="text-red-700 text-sm font-bold">{overCompleteMessage}</p>
-              <p className="text-red-600 text-xs mt-1 font-semibold">
-                🚫 MANDATORY: Select new bowler to continue. Same bowler CANNOT bowl consecutive overs!
-              </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+              <div>
+                <p className="text-red-700 text-sm font-bold">{overCompleteMessage}</p>
+                <p className="text-red-600 text-xs mt-1 font-semibold">
+                  🚫 MANDATORY: Select new bowler to continue. Same bowler CANNOT bowl consecutive overs!
+                </p>
+              </div>
             </div>
+            <button
+              onClick={handleUndo}
+              className="bg-orange-600 text-white px-3 py-1 rounded text-xs hover:bg-orange-700 ml-2"
+            >
+              Undo Last Ball
+            </button>
           </div>
         </div>
       )}
@@ -614,6 +670,18 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           showOnlyAvailable={true}
           allowAddPlayer={true}
           groupId={currentGroup?.id}
+        />
+      )}
+
+      {/* Run Out Modal */}
+      {showRunOutModal && pendingRunOutBall && (
+        <RunOutModal
+          match={match}
+          onComplete={handleRunOutComplete}
+          onClose={() => {
+            setShowRunOutModal(false);
+            setPendingRunOutBall(null);
+          }}
         />
       )}
 

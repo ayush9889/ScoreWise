@@ -3,6 +3,7 @@ import { Plus, Search, User, Camera, X, Phone, Mail } from 'lucide-react';
 import { Player } from '../types/cricket';
 import { storageService } from '../services/storage';
 import { authService } from '../services/authService';
+import { CricketEngine } from '../services/cricketEngine';
 
 interface PlayerSelectorProps {
   onPlayerSelect: (player: Player) => void;
@@ -13,6 +14,7 @@ interface PlayerSelectorProps {
   showOnlyAvailable?: boolean;
   allowAddPlayer?: boolean;
   groupId?: string;
+  match?: any; // For team validation
 }
 
 export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
@@ -23,7 +25,8 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
   players,
   showOnlyAvailable = false,
   allowAddPlayer = true,
-  groupId
+  groupId,
+  match
 }) => {
   const [filteredPlayers, setFilteredPlayers] = useState<Player[]>(players);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,8 +53,19 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
       const matchesSearch = player.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (player.shortId && player.shortId.toLowerCase().includes(searchTerm.toLowerCase()));
       
-      console.log(`Player ${player.name}: excluded=${!notExcluded}, matches=${matchesSearch}`);
-      return notExcluded && matchesSearch;
+      // CRITICAL: Team validation for match context
+      let teamEligible = true;
+      if (match) {
+        // Determine which team this player should play for based on selector context
+        if (title.toLowerCase().includes('bowler') || title.toLowerCase().includes('bowling')) {
+          teamEligible = CricketEngine.canPlayerPlayForTeam(player, match.bowlingTeam, match.battingTeam);
+        } else if (title.toLowerCase().includes('batsman') || title.toLowerCase().includes('batting')) {
+          teamEligible = CricketEngine.canPlayerPlayForTeam(player, match.battingTeam, match.bowlingTeam);
+        }
+      }
+      
+      console.log(`Player ${player.name}: excluded=${!notExcluded}, matches=${matchesSearch}, teamEligible=${teamEligible}`);
+      return notExcluded && matchesSearch && teamEligible;
     });
 
     // Sort players: group members first, then by name
@@ -63,7 +77,7 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
 
     console.log(`✅ FILTERED RESULT: ${filtered.length} players available:`, filtered.map(p => p.name));
     setFilteredPlayers(filtered);
-  }, [players, searchTerm, excludePlayerIds]);
+  }, [players, searchTerm, excludePlayerIds, match, title]);
 
   // Auto-suggest based on first letter
   useEffect(() => {
@@ -213,6 +227,26 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
       console.log(`❌ SELECTION REJECTED: ${player.name} is in excluded list`);
       alert(`❌ ${player.name} cannot be selected at this time.\n\nThis player is currently excluded from selection.`);
       return;
+    }
+    
+    // CRITICAL: Team validation for match context
+    if (match) {
+      let canPlay = true;
+      let teamName = '';
+      
+      if (title.toLowerCase().includes('bowler') || title.toLowerCase().includes('bowling')) {
+        canPlay = CricketEngine.canPlayerPlayForTeam(player, match.bowlingTeam, match.battingTeam);
+        teamName = match.bowlingTeam.name;
+      } else if (title.toLowerCase().includes('batsman') || title.toLowerCase().includes('batting')) {
+        canPlay = CricketEngine.canPlayerPlayForTeam(player, match.battingTeam, match.bowlingTeam);
+        teamName = match.battingTeam.name;
+      }
+      
+      if (!canPlay) {
+        console.log(`❌ TEAM RESTRICTION: ${player.name} cannot play for ${teamName}`);
+        alert(`❌ TEAM RESTRICTION VIOLATION!\n\n${player.name} cannot play for ${teamName} as they have already played for the opposing team!\n\nPlayers cannot switch teams during a match.`);
+        return;
+      }
     }
     
     console.log(`✅ SELECTION VALIDATION PASSED`);
@@ -435,44 +469,73 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
             </div>
           )}
 
-          {filteredPlayers.map((player) => (
-            <button
-              key={player.id}
-              onClick={() => handlePlayerClick(player)}
-              className="w-full p-4 text-left border border-gray-200 rounded-lg mb-2 hover:bg-green-50 hover:border-green-300 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 active:bg-green-100"
-            >
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-3 overflow-hidden">
-                  {player.photoUrl ? (
-                    <img src={player.photoUrl} alt={player.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <User className="w-6 h-6 text-green-600" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="font-semibold text-gray-900 flex items-center">
-                    {player.name}
-                    {player.isGroupMember && (
-                      <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                        Member
-                      </span>
-                    )}
-                    {!player.isGroupMember && (
-                      <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
-                        Guest
-                      </span>
+          {filteredPlayers.map((player) => {
+            // Check team eligibility for display
+            let teamEligible = true;
+            let teamWarning = '';
+            
+            if (match) {
+              if (title.toLowerCase().includes('bowler') || title.toLowerCase().includes('bowling')) {
+                teamEligible = CricketEngine.canPlayerPlayForTeam(player, match.bowlingTeam, match.battingTeam);
+                if (!teamEligible) teamWarning = 'Already played for batting team';
+              } else if (title.toLowerCase().includes('batsman') || title.toLowerCase().includes('batting')) {
+                teamEligible = CricketEngine.canPlayerPlayForTeam(player, match.battingTeam, match.bowlingTeam);
+                if (!teamEligible) teamWarning = 'Already played for bowling team';
+              }
+            }
+            
+            return (
+              <button
+                key={player.id}
+                onClick={() => handlePlayerClick(player)}
+                disabled={!teamEligible}
+                className={`w-full p-4 text-left border border-gray-200 rounded-lg mb-2 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                  teamEligible 
+                    ? 'hover:bg-green-50 hover:border-green-300 active:bg-green-100' 
+                    : 'opacity-50 cursor-not-allowed bg-red-50 border-red-200'
+                }`}
+              >
+                <div className="flex items-center">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-3 overflow-hidden">
+                    {player.photoUrl ? (
+                      <img src={player.photoUrl} alt={player.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-6 h-6 text-green-600" />
                     )}
                   </div>
-                  {player.shortId && (
-                    <div className="text-sm text-gray-500">#{player.shortId}</div>
-                  )}
-                  <div className="text-xs text-gray-400">
-                    {player.stats.matchesPlayed} matches • {player.stats.runsScored} runs • {player.stats.wicketsTaken} wickets
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900 flex items-center">
+                      {player.name}
+                      {player.isGroupMember && (
+                        <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                          Member
+                        </span>
+                      )}
+                      {!player.isGroupMember && (
+                        <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded-full">
+                          Guest
+                        </span>
+                      )}
+                      {!teamEligible && (
+                        <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full">
+                          Ineligible
+                        </span>
+                      )}
+                    </div>
+                    {player.shortId && (
+                      <div className="text-sm text-gray-500">#{player.shortId}</div>
+                    )}
+                    <div className="text-xs text-gray-400">
+                      {player.stats.matchesPlayed} matches • {player.stats.runsScored} runs • {player.stats.wicketsTaken} wickets
+                    </div>
+                    {!teamEligible && teamWarning && (
+                      <div className="text-xs text-red-600 mt-1">{teamWarning}</div>
+                    )}
                   </div>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
 
           {filteredPlayers.length === 0 && searchTerm && !showAddPlayer && !showQuickAdd && (
             <div className="text-center py-8 text-gray-500">
