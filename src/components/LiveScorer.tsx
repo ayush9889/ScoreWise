@@ -5,7 +5,7 @@ import { ScoreDisplay } from './ScoreDisplay';
 import { ScoringPanel } from './ScoringPanel';
 import { PlayerSelector } from './PlayerSelector';
 import { CricketEngine } from '../services/cricketEngine';
-import { storageService } from '../services/storageService';
+import { storage } from '../services/storage';
 import { LiveScoreboard } from './LiveScoreboard';
 import { ScorecardModal } from './ScorecardModal';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -64,7 +64,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   useEffect(() => {
     const loadPlayers = async () => {
       try {
-        const players = await storageService.getAllPlayers();
+        const players = await storage.getAllPlayers();
         setAllPlayers(players);
       } catch (error) {
         console.error('Failed to load players:', error);
