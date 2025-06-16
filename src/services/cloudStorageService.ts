@@ -195,4 +195,4 @@ export const cloudStorageService = {
       throw new Error('Failed to get team matches from cloud storage');
     }
   }
-};
+}; 
