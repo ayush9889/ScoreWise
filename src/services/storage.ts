@@ -1,8 +1,8 @@
 import { Match, Player } from '../types/cricket';
 import { User, Group, Invitation } from '../types/auth';
 
-const DB_NAME = 'CricketScorerDB';
-const DB_VERSION = 2;
+const DB_NAME = 'ScoreWiseDB';
+const DB_VERSION = 3;
 
 class StorageService {
   private db: IDBDatabase | null = null;
@@ -31,6 +31,7 @@ class StorageService {
         if (!db.objectStoreNames.contains('matches')) {
           const matchesStore = db.createObjectStore('matches', { keyPath: 'id' });
           matchesStore.createIndex('startTime', 'startTime', { unique: false });
+          matchesStore.createIndex('isCompleted', 'isCompleted', { unique: false });
         }
 
         // Create users store
@@ -116,10 +117,20 @@ class StorageService {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(['matches'], 'readwrite');
       const store = transaction.objectStore('matches');
-      const request = store.put(match);
+      
+      // Add timestamp for better tracking
+      const matchWithTimestamp = {
+        ...match,
+        lastUpdated: Date.now()
+      };
+      
+      const request = store.put(matchWithTimestamp);
 
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
+      request.onsuccess = () => {
+        console.log('Match saved to local storage:', match.id);
+        resolve();
+      };
     });
   }
 
@@ -132,7 +143,13 @@ class StorageService {
       const request = store.get(id);
 
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result || null);
+      request.onsuccess = () => {
+        const result = request.result || null;
+        if (result) {
+          console.log('Match loaded from local storage:', id);
+        }
+        resolve(result);
+      };
     });
   }
 
@@ -149,6 +166,22 @@ class StorageService {
     });
   }
 
+  async clearCurrentMatch(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['matches'], 'readwrite');
+      const store = transaction.objectStore('matches');
+      const request = store.delete('current_match');
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        console.log('Current match cleared from local storage');
+        resolve();
+      };
+    });
+  }
+
   // User methods
   async saveUser(user: User): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
@@ -159,7 +192,11 @@ class StorageService {
       const request = store.put(user);
 
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
+      request.onsuccess = () => {
+        // Also save to localStorage for session persistence
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        resolve();
+      };
     });
   }
 
@@ -200,7 +237,11 @@ class StorageService {
       const request = store.put(group);
 
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
+      request.onsuccess = () => {
+        // Also save to localStorage for session persistence
+        localStorage.setItem('currentGroup', JSON.stringify(group));
+        resolve();
+      };
     });
   }
 
@@ -266,7 +307,8 @@ class StorageService {
     return JSON.stringify({
       players,
       matches,
-      exportDate: new Date().toISOString()
+      exportDate: new Date().toISOString(),
+      version: DB_VERSION
     }, null, 2);
   }
 
@@ -288,6 +330,37 @@ class StorageService {
     } catch (error) {
       throw new Error('Invalid import data format');
     }
+  }
+
+  // Utility methods
+  async clearAllData(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const storeNames = ['players', 'matches', 'users', 'groups', 'invitations', 'settings'];
+    
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(storeNames, 'readwrite');
+      
+      let completed = 0;
+      const total = storeNames.length;
+      
+      storeNames.forEach(storeName => {
+        const store = transaction.objectStore(storeName);
+        const request = store.clear();
+        
+        request.onsuccess = () => {
+          completed++;
+          if (completed === total) {
+            // Also clear localStorage
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('currentGroup');
+            resolve();
+          }
+        };
+        
+        request.onerror = () => reject(request.error);
+      });
+    });
   }
 }
 

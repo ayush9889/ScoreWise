@@ -9,7 +9,7 @@ import { Match, Player } from './types/cricket';
 import { User, Group } from './types/auth';
 import { storageService } from './services/storage';
 import { authService } from './services/authService';
-import { Trophy, BarChart3, Play, Award, Users, UserPlus, LogIn, LogOut } from 'lucide-react';
+import { Trophy, BarChart3, Play, Award, Users, UserPlus, LogIn, LogOut, Zap } from 'lucide-react';
 
 type AppState = 'home' | 'auth' | 'group-management' | 'match-setup' | 'live-scoring' | 'dashboard' | 'match-complete';
 
@@ -41,6 +41,13 @@ function App() {
         }
       }
       
+      // Check for ongoing match
+      const savedMatch = await storageService.getMatch('current_match');
+      if (savedMatch && !savedMatch.isCompleted) {
+        setCurrentMatch(savedMatch);
+        setCurrentState('live-scoring');
+      }
+      
       setIsInitialized(true);
     } catch (error) {
       console.error('Failed to initialize app:', error);
@@ -67,17 +74,30 @@ function App() {
     setCurrentState('home');
   };
 
-  const handleMatchStart = (match: Match) => {
+  const handleMatchStart = async (match: Match) => {
+    // Save as current match for persistence
+    await storageService.saveMatch({ ...match, id: 'current_match' });
     setCurrentMatch(match);
     setCurrentState('live-scoring');
   };
 
-  const handleMatchComplete = (match: Match) => {
-    setCurrentMatch(match);
+  const handleMatchComplete = async (match: Match) => {
+    // Save completed match with unique ID
+    const completedMatch = { ...match, id: `match_${Date.now()}` };
+    await storageService.saveMatch(completedMatch);
+    
+    // Clear current match
+    await storageService.clearCurrentMatch();
+    
+    setCurrentMatch(completedMatch);
     setCurrentState('match-complete');
   };
 
-  const handleBackToHome = () => {
+  const handleBackToHome = async () => {
+    // Clear current match if going back to home
+    if (currentMatch && !currentMatch.isCompleted) {
+      await storageService.clearCurrentMatch();
+    }
     setCurrentState('home');
     setCurrentMatch(null);
   };
@@ -89,10 +109,16 @@ function App() {
 
   if (!isInitialized) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg">Initializing Cricket Scorer...</p>
+          <div className="relative mb-8">
+            <div className="animate-spin rounded-full h-20 w-20 border-4 border-emerald-200 border-t-emerald-600 mx-auto"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Zap className="w-8 h-8 text-emerald-600" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 font-brand mb-2">ScoreWise</h1>
+          <p className="text-gray-600 text-lg">Initializing your cricket experience...</p>
         </div>
       </div>
     );
@@ -100,34 +126,34 @@ function App() {
 
   if (currentState === 'home') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50">
         {/* Header */}
         <div className="pt-8 pb-4 px-4">
           <div className="flex justify-between items-center max-w-md mx-auto">
             <div></div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
               <button
                 onClick={() => setShowAddPlayerModal(true)}
-                className="p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-all"
+                className="p-3 glass-effect rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
                 title="Add Player"
               >
-                <UserPlus className="w-5 h-5 text-green-600" />
+                <UserPlus className="w-5 h-5 text-emerald-600" />
               </button>
               
               {currentUser ? (
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gradient-primary rounded-xl flex items-center justify-center shadow-lg">
                     {currentUser.photoUrl ? (
-                      <img src={currentUser.photoUrl} alt={currentUser.name} className="w-full h-full object-cover rounded-full" />
+                      <img src={currentUser.photoUrl} alt={currentUser.name} className="w-full h-full object-cover rounded-xl" />
                     ) : (
-                      <span className="text-green-600 font-semibold text-sm">
+                      <span className="text-white font-bold text-sm">
                         {currentUser.name.charAt(0).toUpperCase()}
                       </span>
                     )}
                   </div>
                   <button
                     onClick={handleSignOut}
-                    className="p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-all"
+                    className="p-3 glass-effect rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
                     title="Sign Out"
                   >
                     <LogOut className="w-5 h-5 text-gray-600" />
@@ -139,10 +165,10 @@ function App() {
                     setAuthMode('signin');
                     setShowAuthModal(true);
                   }}
-                  className="p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-all"
+                  className="p-3 glass-effect rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
                   title="Sign In"
                 >
-                  <LogIn className="w-5 h-5 text-green-600" />
+                  <LogIn className="w-5 h-5 text-emerald-600" />
                 </button>
               )}
             </div>
@@ -151,17 +177,19 @@ function App() {
 
         {/* Main Content */}
         <div className="px-4">
-          <div className="text-center mb-8">
-            <div className="bg-green-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl">
-              <Trophy className="w-10 h-10 text-white" />
+          <div className="text-center mb-12">
+            <div className="gradient-primary w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-premium">
+              <Zap className="w-12 h-12 text-white" />
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-3">Cricket Scorer</h1>
-            <p className="text-gray-600 text-lg">Fast & Simple Community Cricket Scoring</p>
+            <h1 className="text-5xl font-black text-gray-900 mb-4 font-brand text-shadow">
+              Score<span className="text-emerald-600">Wise</span>
+            </h1>
+            <p className="text-gray-600 text-xl font-medium">Professional Cricket Scoring Made Simple</p>
             
             {currentUser && currentGroup && (
-              <div className="mt-4 p-3 bg-white rounded-lg shadow-sm max-w-md mx-auto">
-                <p className="text-sm text-gray-600">Signed in as <span className="font-semibold">{currentUser.name}</span></p>
-                <p className="text-sm text-green-600">Group: {currentGroup.name}</p>
+              <div className="mt-6 p-4 glass-effect rounded-2xl shadow-lg max-w-md mx-auto">
+                <p className="text-sm text-gray-600">Welcome back, <span className="font-semibold text-gray-900">{currentUser.name}</span></p>
+                <p className="text-sm text-emerald-600 font-medium">Group: {currentGroup.name}</p>
               </div>
             )}
           </div>
@@ -177,17 +205,17 @@ function App() {
                   setShowAuthModal(true);
                 }
               }}
-              className="w-full bg-white rounded-2xl shadow-lg p-6 text-left hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-green-200"
+              className="w-full glass-effect rounded-3xl shadow-premium p-8 text-left hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-emerald-200 group"
             >
               <div className="flex items-center">
-                <div className="bg-green-100 w-12 h-12 rounded-full flex items-center justify-center mr-4">
-                  <Play className="w-6 h-6 text-green-600" />
+                <div className="gradient-primary w-16 h-16 rounded-2xl flex items-center justify-center mr-6 group-hover:scale-110 transition-transform duration-200">
+                  <Play className="w-8 h-8 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-1">New Match</h3>
-                  <p className="text-gray-600">Start scoring a new cricket match</p>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2 font-display">New Match</h3>
+                  <p className="text-gray-600 font-medium">Start scoring a new cricket match</p>
                   {!currentUser && (
-                    <p className="text-sm text-orange-600 mt-1">Sign in required</p>
+                    <p className="text-sm text-orange-600 mt-2 font-medium">Sign in required</p>
                   )}
                 </div>
               </div>
@@ -195,15 +223,15 @@ function App() {
 
             <button
               onClick={() => setCurrentState('dashboard')}
-              className="w-full bg-white rounded-2xl shadow-lg p-6 text-left hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-blue-200"
+              className="w-full glass-effect rounded-3xl shadow-premium p-8 text-left hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-blue-200 group"
             >
               <div className="flex items-center">
-                <div className="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center mr-4">
-                  <BarChart3 className="w-6 h-6 text-blue-600" />
+                <div className="gradient-secondary w-16 h-16 rounded-2xl flex items-center justify-center mr-6 group-hover:scale-110 transition-transform duration-200">
+                  <BarChart3 className="w-8 h-8 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-1">Dashboard</h3>
-                  <p className="text-gray-600">View stats, leaderboards & match history</p>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2 font-display">Dashboard</h3>
+                  <p className="text-gray-600 font-medium">View stats, leaderboards & match history</p>
                 </div>
               </div>
             </button>
@@ -211,15 +239,15 @@ function App() {
             {currentUser && (
               <button
                 onClick={() => setCurrentState('group-management')}
-                className="w-full bg-white rounded-2xl shadow-lg p-6 text-left hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-purple-200"
+                className="w-full glass-effect rounded-3xl shadow-premium p-8 text-left hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-purple-200 group"
               >
                 <div className="flex items-center">
-                  <div className="bg-purple-100 w-12 h-12 rounded-full flex items-center justify-center mr-4">
-                    <Users className="w-6 h-6 text-purple-600" />
+                  <div className="bg-gradient-to-br from-purple-500 to-purple-600 w-16 h-16 rounded-2xl flex items-center justify-center mr-6 group-hover:scale-110 transition-transform duration-200">
+                    <Users className="w-8 h-8 text-white" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-1">Manage Group</h3>
-                    <p className="text-gray-600">Create or join cricket groups</p>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2 font-display">Manage Group</h3>
+                    <p className="text-gray-600 font-medium">Create or join cricket groups</p>
                   </div>
                 </div>
               </button>
@@ -231,15 +259,15 @@ function App() {
                   setAuthMode('signup');
                   setShowAuthModal(true);
                 }}
-                className="w-full bg-white rounded-2xl shadow-lg p-6 text-left hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-green-200"
+                className="w-full glass-effect rounded-3xl shadow-premium p-8 text-left hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-emerald-200 group"
               >
                 <div className="flex items-center">
-                  <div className="bg-green-100 w-12 h-12 rounded-full flex items-center justify-center mr-4">
-                    <Users className="w-6 h-6 text-green-600" />
+                  <div className="gradient-primary w-16 h-16 rounded-2xl flex items-center justify-center mr-6 group-hover:scale-110 transition-transform duration-200">
+                    <Users className="w-8 h-8 text-white" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-1">Join Community</h3>
-                    <p className="text-gray-600">Create account to manage groups & track stats</p>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2 font-display">Join Community</h3>
+                    <p className="text-gray-600 font-medium">Create account to manage groups & track stats</p>
                   </div>
                 </div>
               </button>
@@ -247,42 +275,42 @@ function App() {
           </div>
 
           {/* Features */}
-          <div className="max-w-4xl mx-auto mt-16">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Built for Community Cricket</h2>
-              <p className="text-gray-600">Everything you need for local matches</p>
+          <div className="max-w-4xl mx-auto mt-20">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-3 font-display">Built for Modern Cricket</h2>
+              <p className="text-gray-600 text-lg">Everything you need for professional scoring</p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="bg-white rounded-xl p-6 shadow-sm text-center">
-                <div className="bg-green-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Trophy className="w-6 h-6 text-green-600" />
+            <div className="grid md:grid-cols-3 gap-8">
+              <div className="glass-effect rounded-2xl p-8 shadow-lg text-center hover:shadow-xl transition-all duration-300">
+                <div className="gradient-primary w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Zap className="w-8 h-8 text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Zero Setup</h3>
-                <p className="text-gray-600 text-sm">Just team names and toss - start scoring instantly</p>
+                <h3 className="font-bold text-gray-900 mb-3 text-lg font-display">Lightning Fast</h3>
+                <p className="text-gray-600">Instant setup with just team names and toss</p>
               </div>
 
-              <div className="bg-white rounded-xl p-6 shadow-sm text-center">
-                <div className="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <BarChart3 className="w-6 h-6 text-blue-600" />
+              <div className="glass-effect rounded-2xl p-8 shadow-lg text-center hover:shadow-xl transition-all duration-300">
+                <div className="gradient-secondary w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <BarChart3 className="w-8 h-8 text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Smart Stats</h3>
-                <p className="text-gray-600 text-sm">Automatic player tracking and leaderboards</p>
+                <h3 className="font-bold text-gray-900 mb-3 text-lg font-display">Smart Analytics</h3>
+                <p className="text-gray-600">Real-time stats and professional leaderboards</p>
               </div>
 
-              <div className="bg-white rounded-xl p-6 shadow-sm text-center">
-                <div className="bg-orange-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Award className="w-6 h-6 text-orange-600" />
+              <div className="glass-effect rounded-2xl p-8 shadow-lg text-center hover:shadow-xl transition-all duration-300">
+                <div className="bg-gradient-to-br from-orange-500 to-orange-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Award className="w-8 h-8 text-white" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Group Features</h3>
-                <p className="text-gray-600 text-sm">Create groups, invite members, share stats</p>
+                <h3 className="font-bold text-gray-900 mb-3 text-lg font-display">Team Features</h3>
+                <p className="text-gray-600">Groups, invitations, and shared statistics</p>
               </div>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="text-center mt-16 pb-8">
-            <p className="text-gray-500 text-sm">
+          <div className="text-center mt-20 pb-12">
+            <p className="text-gray-500 font-medium">
               Perfect for club matches, tournaments & practice games
             </p>
           </div>
@@ -331,73 +359,73 @@ function App() {
 
   if (currentState === 'match-complete' && currentMatch) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
-          <div className="bg-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Trophy className="w-8 h-8 text-white" />
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 flex items-center justify-center p-4">
+        <div className="glass-effect rounded-3xl shadow-premium p-8 w-full max-w-md text-center">
+          <div className="gradient-primary w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-8">
+            <Trophy className="w-10 h-10 text-white" />
           </div>
           
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Match Complete!</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-3 font-display">Match Complete!</h1>
           
           {/* Match Result */}
-          <div className="bg-gray-50 rounded-xl p-6 mb-6">
-            <div className="text-lg font-semibold text-gray-900 mb-4">
+          <div className="bg-gray-50 rounded-2xl p-6 mb-8">
+            <h3 className="font-semibold text-gray-900 mb-4 text-center font-display">
               {currentMatch.team1.name} vs {currentMatch.team2.name}
-            </div>
+            </h3>
             
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between">
-                <span>{currentMatch.team1.name}</span>
-                <span className="font-semibold">
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">{currentMatch.team1.name}</span>
+                <span className="font-bold text-lg">
                   {currentMatch.team1.score}/{currentMatch.team1.wickets} ({currentMatch.team1.overs}.{currentMatch.team1.balls})
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span>{currentMatch.team2.name}</span>
-                <span className="font-semibold">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">{currentMatch.team2.name}</span>
+                <span className="font-bold text-lg">
                   {currentMatch.team2.score}/{currentMatch.team2.wickets} ({currentMatch.team2.overs}.{currentMatch.team2.balls})
                 </span>
               </div>
             </div>
             
             <div className="text-center">
-              <div className="text-sm text-gray-600 mb-1">Winner</div>
-              <div className="text-xl font-bold text-green-600">{currentMatch.winner}</div>
+              <div className="text-sm text-gray-600 mb-2">Winner</div>
+              <div className="text-2xl font-bold text-emerald-600 font-display">{currentMatch.winner}</div>
             </div>
           </div>
 
           {/* Man of the Match */}
           {currentMatch.manOfTheMatch && (
-            <div className="bg-yellow-50 rounded-xl p-4 mb-6">
-              <div className="flex items-center justify-center mb-2">
-                <Award className="w-5 h-5 text-yellow-600 mr-2" />
-                <span className="font-semibold text-yellow-700">Man of the Match</span>
+            <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-2xl p-6 mb-8 border border-yellow-200">
+              <div className="flex items-center justify-center mb-3">
+                <Award className="w-6 h-6 text-yellow-600 mr-2" />
+                <span className="font-bold text-yellow-700 font-display">Man of the Match</span>
               </div>
-              <div className="text-lg font-bold text-gray-900">
+              <div className="text-xl font-bold text-gray-900 font-display">
                 {currentMatch.manOfTheMatch.name}
               </div>
             </div>
           )}
 
           {/* Actions */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <button
               onClick={() => setCurrentState('match-setup')}
-              className="w-full bg-green-600 text-white py-3 px-4 rounded-xl font-semibold hover:bg-green-700 transition-colors"
+              className="w-full gradient-primary text-white py-4 px-6 rounded-2xl font-bold text-lg hover:shadow-lg transition-all duration-200"
             >
               Start New Match
             </button>
             
             <button
               onClick={() => setCurrentState('dashboard')}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+              className="w-full gradient-secondary text-white py-4 px-6 rounded-2xl font-bold text-lg hover:shadow-lg transition-all duration-200"
             >
               View Dashboard
             </button>
             
             <button
               onClick={handleBackToHome}
-              className="w-full bg-gray-300 text-gray-700 py-3 px-4 rounded-xl font-semibold hover:bg-gray-400 transition-colors"
+              className="w-full bg-gray-200 text-gray-700 py-4 px-6 rounded-2xl font-bold text-lg hover:bg-gray-300 transition-all duration-200"
             >
               Back to Home
             </button>
