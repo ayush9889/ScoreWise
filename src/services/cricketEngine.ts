@@ -15,14 +15,38 @@ export class CricketEngine {
     return shouldRotateOnRuns || isOverComplete;
   }
 
-  // Check if over is complete
+  // Check if over is complete - STRICT 6 ball rule
   static isOverComplete(match: Match): boolean {
+    const currentOver = match.battingTeam.overs + 1;
     const validBalls = match.balls.filter(b => 
-      b.overNumber === (match.battingTeam.overs + 1) && 
+      b.overNumber === currentOver && 
       !b.isWide && 
       !b.isNoBall
     );
     return validBalls.length >= 6;
+  }
+
+  // STRICT innings completion - only after specified overs
+  static isInningsComplete(match: Match): boolean {
+    const battingTeam = match.battingTeam;
+    
+    // STRICT: All overs completed (this is the primary condition)
+    if (battingTeam.overs >= match.totalOvers) {
+      return true;
+    }
+    
+    // All wickets lost (assuming 10 wickets max)
+    if (battingTeam.wickets >= 10) {
+      return true;
+    }
+    
+    // Target reached in second innings
+    if (match.isSecondInnings && match.firstInningsScore && 
+        battingTeam.score > match.firstInningsScore) {
+      return true;
+    }
+    
+    return false;
   }
 
   // Strict bowler validation - cannot bowl consecutive overs
@@ -122,29 +146,6 @@ export class CricketEngine {
     }
     
     return updatedMatch;
-  }
-
-  // Check if innings is complete
-  static isInningsComplete(match: Match): boolean {
-    const battingTeam = match.battingTeam;
-    
-    // All overs completed
-    if (battingTeam.overs >= match.totalOvers) {
-      return true;
-    }
-    
-    // All wickets lost (assuming 10 wickets max)
-    if (battingTeam.wickets >= 10) {
-      return true;
-    }
-    
-    // Target reached in second innings
-    if (match.isSecondInnings && match.firstInningsScore && 
-        battingTeam.score > match.firstInningsScore) {
-      return true;
-    }
-    
-    return false;
   }
 
   // Get match result

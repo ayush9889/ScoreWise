@@ -256,14 +256,14 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     // Process the ball using cricket engine
     let updatedMatch = CricketEngine.processBall(match, ball);
 
-    // Check if over is complete
+    // STRICT: Check if over is complete (exactly 6 valid balls)
     const isOverComplete = CricketEngine.isOverComplete(updatedMatch);
     
     if (isOverComplete) {
       setOverCompleteMessage(`Over ${updatedMatch.battingTeam.overs} completed!`);
       setNeedsBowlerChange(true);
       
-      // Get available bowlers for next over
+      // Get available bowlers for next over (strict rule: no consecutive overs)
       const availableBowlers = CricketEngine.getAvailableBowlers(updatedMatch, updatedMatch.battingTeam.overs + 1);
       
       if (availableBowlers.length === 0) {
@@ -280,7 +280,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       setShowNewBatsmanSelector(true);
     }
 
-    // Check for innings completion
+    // STRICT: Check for innings completion (only after specified overs)
     if (CricketEngine.isInningsComplete(updatedMatch)) {
       if (!updatedMatch.isSecondInnings) {
         handleInningsTransition();
