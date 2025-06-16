@@ -275,6 +275,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   };
 
   const handleScoreUpdate = (ball: Ball) => {
+    console.log(`\n🏏 PROCESSING BALL: ${ball.runs} runs by ${ball.striker.name} off ${ball.bowler.name}`);
+    
     // Add to action history for undo functionality
     setActionHistory([...actionHistory, ball]);
     setRedoStack([]); // Clear redo stack when new action is performed
@@ -282,40 +284,49 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     // Process the ball using cricket engine
     let updatedMatch = CricketEngine.processBall(match, ball);
 
-    // STRICT: Check if over is complete (exactly 6 valid balls)
+    console.log(`📊 After ball: ${updatedMatch.battingTeam.score}/${updatedMatch.battingTeam.wickets} in ${updatedMatch.battingTeam.overs}.${updatedMatch.battingTeam.balls}`);
+
+    // CRITICAL: Check if over is complete and bowler needs to be changed
     const isOverComplete = CricketEngine.isOverComplete(updatedMatch);
     
     if (isOverComplete) {
+      console.log(`🚨 OVER ${updatedMatch.battingTeam.overs} COMPLETED - BOWLER CHANGE MANDATORY!`);
+      
       setOverCompleteMessage(`Over ${updatedMatch.battingTeam.overs} completed!`);
       setNeedsBowlerChange(true);
       
-      // Get available bowlers for next over (STRICT rule: no consecutive overs)
+      // Get available bowlers for next over with ABSOLUTE filtering
       const nextOver = updatedMatch.battingTeam.overs + 1;
       const availableBowlers = CricketEngine.getAvailableBowlers(updatedMatch, nextOver);
       
-      console.log(`Over ${updatedMatch.battingTeam.overs} completed. Available bowlers for over ${nextOver}:`, 
-        availableBowlers.map(b => b.name));
+      console.log(`🔍 Available bowlers for over ${nextOver}:`, availableBowlers.map(b => b.name));
       
       if (availableBowlers.length === 0) {
-        alert('No eligible bowlers available for the next over! Please add more bowlers to the team.');
+        console.log(`🚨 CRITICAL: NO AVAILABLE BOWLERS FOR OVER ${nextOver}!`);
+        alert('🚨 CRITICAL ERROR: No eligible bowlers available for the next over!\n\nPlease add more bowlers to the team immediately.');
         setAddPlayerType('bowling');
         setShowAddPlayerModal(true);
       } else {
+        console.log(`✅ Showing bowler selector for over ${nextOver}`);
         setShowBowlerSelector(true);
       }
     }
 
     // Check for wicket - need new batsman
     if (ball.isWicket) {
+      console.log(`🏏 WICKET! ${ball.striker.name} is out`);
       setNeedsNewBatsman(true);
       setShowNewBatsmanSelector(true);
     }
 
-    // STRICT: Check for innings completion (only after specified overs)
+    // Check for innings completion
     if (CricketEngine.isInningsComplete(updatedMatch)) {
+      console.log(`🏁 INNINGS COMPLETE!`);
       if (!updatedMatch.isSecondInnings) {
+        console.log(`🔄 Moving to second innings`);
         handleInningsTransition();
       } else {
+        console.log(`🏆 MATCH COMPLETE!`);
         handleMatchComplete();
       }
     }
@@ -324,29 +335,40 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   };
 
   const handleBowlerChange = (newBowler: Player) => {
+    console.log(`\n🏏 ATTEMPTING BOWLER CHANGE TO: ${newBowler.name}`);
+    
     const updatedMatch = { ...match };
     
-    // STRICT: Validate that this bowler can bowl the next over
+    // ABSOLUTE VALIDATION: Check if this bowler can bowl the next over
     const nextOver = updatedMatch.battingTeam.overs + 1;
-    if (!CricketEngine.canBowlerBowlNextOver(newBowler, updatedMatch)) {
-      alert(`${newBowler.name} cannot bowl consecutive overs! Please select a different bowler.`);
+    const canBowl = CricketEngine.canBowlerBowlNextOver(newBowler, updatedMatch);
+    
+    if (!canBowl) {
+      console.log(`❌ BOWLER CHANGE REJECTED: ${newBowler.name} cannot bowl consecutive overs!`);
+      alert(`🚫 RULE VIOLATION!\n\n${newBowler.name} cannot bowl consecutive overs!\n\nThis is a fundamental cricket rule. Please select a different bowler.`);
       return;
     }
     
+    console.log(`✅ BOWLER CHANGE APPROVED: ${newBowler.name} can bowl over ${nextOver}`);
+    
+    // Update bowler
     updatedMatch.previousBowler = updatedMatch.currentBowler;
     updatedMatch.currentBowler = newBowler;
     
-    console.log(`Bowler changed to ${newBowler.name} for over ${nextOver}`);
+    console.log(`🔄 Bowler changed: ${updatedMatch.previousBowler?.name} → ${newBowler.name}`);
     
     // Add bowler to bowling team if not already present
     if (!updatedMatch.bowlingTeam.players.find(p => p.id === newBowler.id)) {
       updatedMatch.bowlingTeam.players.push(newBowler);
+      console.log(`➕ Added ${newBowler.name} to bowling team`);
     }
     
     setMatch(updatedMatch);
     setShowBowlerSelector(false);
     setNeedsBowlerChange(false);
     setOverCompleteMessage(null);
+    
+    console.log(`✅ BOWLER CHANGE COMPLETE - READY FOR OVER ${nextOver}`);
   };
 
   const handleNewBatsman = (newBatsman: Player) => {
@@ -476,15 +498,15 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         </div>
       </div>
 
-      {/* Over Complete Message with Bowler Change Required */}
+      {/* CRITICAL: Over Complete Message with MANDATORY Bowler Change */}
       {overCompleteMessage && needsBowlerChange && (
         <div className="bg-red-100 border-l-4 border-red-500 p-3 m-2">
           <div className="flex items-center">
             <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
             <div>
-              <p className="text-red-700 text-sm font-semibold">{overCompleteMessage}</p>
-              <p className="text-red-600 text-xs mt-1">
-                <strong>MANDATORY:</strong> Select new bowler to continue. Same bowler cannot bowl consecutive overs.
+              <p className="text-red-700 text-sm font-bold">{overCompleteMessage}</p>
+              <p className="text-red-600 text-xs mt-1 font-semibold">
+                🚫 MANDATORY: Select new bowler to continue. Same bowler CANNOT bowl consecutive overs!
               </p>
             </div>
           </div>
@@ -546,12 +568,17 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         />
       )}
 
-      {/* Bowler Selector Modal with STRICT filtering */}
+      {/* CRITICAL: Bowler Selector Modal with ABSOLUTE filtering */}
       {showBowlerSelector && (
         <PlayerSelector
-          title="Select New Bowler (Cannot Bowl Consecutive Overs)"
+          title="🚫 MANDATORY: Select New Bowler (Cannot Bowl Consecutive Overs)"
           onPlayerSelect={handleBowlerChange}
           onClose={() => {
+            // Don't allow closing without selecting a bowler when it's mandatory
+            if (needsBowlerChange) {
+              alert('🚫 You must select a new bowler to continue!\n\nSame bowler cannot bowl consecutive overs.');
+              return;
+            }
             setShowBowlerSelector(false);
             setOverCompleteMessage(null);
             setNeedsBowlerChange(false);
@@ -605,7 +632,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       {/* Add Player Modal */}
       {showAddPlayerModal && (
         <PlayerSelector
-          title={`Add ${addPlayerType === 'batting' ? 'Batsman' : 'Bowler'}`}
+          title={`🚨 URGENT: Add ${addPlayerType === 'batting' ? 'Batsman' : 'Bowler'}`}
           onPlayerSelect={handleAddPlayer}
           onClose={() => setShowAddPlayerModal(false)}
           players={allPlayers}

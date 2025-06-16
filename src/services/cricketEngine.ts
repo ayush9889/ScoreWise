@@ -49,63 +49,108 @@ export class CricketEngine {
     return false;
   }
 
-  // STRICT bowler validation - cannot bowl consecutive overs
+  // ABSOLUTE STRICT bowler validation - ZERO tolerance for consecutive overs
   static canBowlerBowlNextOver(bowler: Player, match: Match): boolean {
-    if (match.balls.length === 0) return true;
+    console.log(`🏏 CHECKING: Can ${bowler.name} bowl next over?`);
+    
+    if (match.balls.length === 0) {
+      console.log(`✅ ALLOWED: First over of match`);
+      return true;
+    }
     
     const currentOver = match.battingTeam.overs + 1;
     const previousOver = currentOver - 1;
     
-    if (previousOver <= 0) return true;
-    
-    // Check who bowled the previous over
-    const previousOverBalls = match.balls.filter(b => b.overNumber === previousOver);
-    if (previousOverBalls.length === 0) return true;
-    
-    const previousOverBowler = previousOverBalls[0]?.bowler;
-    
-    // STRICT: Bowler cannot bowl consecutive overs
-    return previousOverBowler?.id !== bowler.id;
-  }
-
-  // Get available bowlers for next over (STRICT filtering)
-  static getAvailableBowlers(match: Match, nextOver: number): Player[] {
-    const allBowlers = match.bowlingTeam.players;
-    
-    if (nextOver <= 1) {
-      // First over - exclude current batsmen
-      return allBowlers.filter(bowler => 
-        bowler.id !== match.currentStriker?.id &&
-        bowler.id !== match.currentNonStriker?.id
-      );
+    if (previousOver <= 0) {
+      console.log(`✅ ALLOWED: No previous over to check`);
+      return true;
     }
     
-    const previousOver = nextOver - 1;
+    // Get ALL balls from the previous over
     const previousOverBalls = match.balls.filter(b => b.overNumber === previousOver);
     
     if (previousOverBalls.length === 0) {
-      return allBowlers.filter(bowler => 
+      console.log(`✅ ALLOWED: No balls found in previous over ${previousOver}`);
+      return true;
+    }
+    
+    // Check who bowled the previous over - ALL balls must be from same bowler
+    const previousOverBowlerId = previousOverBalls[0]?.bowler?.id;
+    const previousOverBowlerName = previousOverBalls[0]?.bowler?.name;
+    
+    console.log(`🔍 Previous over ${previousOver} bowled by: ${previousOverBowlerName} (ID: ${previousOverBowlerId})`);
+    console.log(`🔍 Checking bowler: ${bowler.name} (ID: ${bowler.id})`);
+    
+    // ABSOLUTE RULE: If this bowler bowled the previous over, REJECT
+    if (previousOverBowlerId === bowler.id) {
+      console.log(`❌ REJECTED: ${bowler.name} bowled previous over ${previousOver}. CONSECUTIVE OVERS NOT ALLOWED!`);
+      return false;
+    }
+    
+    console.log(`✅ ALLOWED: ${bowler.name} did not bowl previous over`);
+    return true;
+  }
+
+  // Get available bowlers with ABSOLUTE filtering
+  static getAvailableBowlers(match: Match, nextOver: number): Player[] {
+    console.log(`\n🏏 GETTING AVAILABLE BOWLERS FOR OVER ${nextOver}`);
+    
+    const allBowlers = match.bowlingTeam.players;
+    console.log(`📋 All bowlers in team:`, allBowlers.map(b => b.name));
+    
+    if (nextOver <= 1) {
+      // First over - exclude current batsmen only
+      const available = allBowlers.filter(bowler => 
         bowler.id !== match.currentStriker?.id &&
         bowler.id !== match.currentNonStriker?.id
       );
+      console.log(`✅ First over - Available bowlers:`, available.map(b => b.name));
+      return available;
+    }
+    
+    const previousOver = nextOver - 1;
+    console.log(`🔍 Checking previous over: ${previousOver}`);
+    
+    // Get who bowled the previous over
+    const previousOverBalls = match.balls.filter(b => b.overNumber === previousOver);
+    
+    if (previousOverBalls.length === 0) {
+      console.log(`⚠️ No balls found in previous over ${previousOver}`);
+      const available = allBowlers.filter(bowler => 
+        bowler.id !== match.currentStriker?.id &&
+        bowler.id !== match.currentNonStriker?.id
+      );
+      console.log(`✅ Available bowlers (no previous over):`, available.map(b => b.name));
+      return available;
     }
     
     const previousBowlerId = previousOverBalls[0]?.bowler?.id;
+    const previousBowlerName = previousOverBalls[0]?.bowler?.name;
     
-    // STRICT: Filter out the previous over bowler and current batsmen
-    const availableBowlers = allBowlers.filter(bowler => 
-      bowler.id !== previousBowlerId &&
-      bowler.id !== match.currentStriker?.id &&
-      bowler.id !== match.currentNonStriker?.id
-    );
+    console.log(`🚫 Previous over ${previousOver} bowled by: ${previousBowlerName} (EXCLUDED)`);
+    
+    // ABSOLUTE FILTERING: Exclude previous bowler and current batsmen
+    const availableBowlers = allBowlers.filter(bowler => {
+      const isNotPreviousBowler = bowler.id !== previousBowlerId;
+      const isNotCurrentBatsman = bowler.id !== match.currentStriker?.id && bowler.id !== match.currentNonStriker?.id;
+      
+      const isAvailable = isNotPreviousBowler && isNotCurrentBatsman;
+      
+      console.log(`🔍 ${bowler.name}: Previous bowler? ${!isNotPreviousBowler}, Current batsman? ${!isNotCurrentBatsman}, Available? ${isAvailable}`);
+      
+      return isAvailable;
+    });
 
-    console.log(`Over ${nextOver}: Previous bowler was ${previousOverBalls[0]?.bowler?.name}, available bowlers:`, 
-      availableBowlers.map(b => b.name));
+    console.log(`✅ FINAL AVAILABLE BOWLERS FOR OVER ${nextOver}:`, availableBowlers.map(b => b.name));
+    
+    if (availableBowlers.length === 0) {
+      console.log(`🚨 WARNING: NO AVAILABLE BOWLERS FOR OVER ${nextOver}!`);
+    }
     
     return availableBowlers;
   }
 
-  // Process ball and update match state with proper cricket rules
+  // Process ball and update match state with STRICT over completion checking
   static processBall(match: Match, ball: Ball): Match {
     const updatedMatch = { ...match };
     
@@ -135,8 +180,10 @@ export class CricketEngine {
     if (!ball.isWide && !ball.isNoBall) {
       updatedMatch.battingTeam.balls++;
       
-      // Check if over is complete
+      // Check if over is complete (EXACTLY 6 valid balls)
       if (updatedMatch.battingTeam.balls >= 6) {
+        console.log(`🏏 OVER ${updatedMatch.battingTeam.overs + 1} COMPLETED!`);
+        
         updatedMatch.battingTeam.overs++;
         updatedMatch.battingTeam.balls = 0;
         
@@ -144,12 +191,21 @@ export class CricketEngine {
         const temp = updatedMatch.currentStriker;
         updatedMatch.currentStriker = updatedMatch.currentNonStriker;
         updatedMatch.currentNonStriker = temp;
+        
+        console.log(`🔄 Strike rotated: ${updatedMatch.currentStriker?.name} now on strike`);
+        
+        // CRITICAL: Clear current bowler to force new selection
+        console.log(`🚫 CLEARING CURRENT BOWLER - NEW BOWLER MUST BE SELECTED`);
+        updatedMatch.previousBowler = updatedMatch.currentBowler;
+        updatedMatch.currentBowler = undefined;
+        
       } else {
         // Check for strike rotation during over
         if (this.shouldRotateStrike(ball, false)) {
           const temp = updatedMatch.currentStriker;
           updatedMatch.currentStriker = updatedMatch.currentNonStriker;
           updatedMatch.currentNonStriker = temp;
+          console.log(`🔄 Strike rotated mid-over: ${updatedMatch.currentStriker?.name} now on strike`);
         }
       }
     } else {
@@ -158,6 +214,7 @@ export class CricketEngine {
         const temp = updatedMatch.currentStriker;
         updatedMatch.currentStriker = updatedMatch.currentNonStriker;
         updatedMatch.currentNonStriker = temp;
+        console.log(`🔄 Strike rotated on extra: ${updatedMatch.currentStriker?.name} now on strike`);
       }
     }
     
