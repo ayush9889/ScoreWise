@@ -49,14 +49,14 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
     const stats = calculateBatsmanStats();
     
     return (
-      <div className={`bg-white rounded-lg shadow-sm p-3 border-l-4 ${
+      <div className={`bg-white rounded-lg shadow-sm p-2 border-l-4 ${
         isStriker ? 'border-green-500 bg-green-50' : 'border-blue-500 bg-blue-50'
       }`}>
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-1">
           <div className="flex items-center">
-            <div className="font-semibold text-gray-900">{player.name}</div>
+            <div className="font-semibold text-gray-900 text-sm">{player.name}</div>
             {isStriker && (
-              <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+              <span className="ml-2 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
                 On Strike
               </span>
             )}
@@ -67,7 +67,7 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
           </div>
         </div>
         
-        <div className="grid grid-cols-4 gap-2 text-xs">
+        <div className="grid grid-cols-4 gap-2 text-xs mb-2">
           <div className="text-center">
             <div className="font-semibold text-gray-700">{stats.ballsFaced}</div>
             <div className="text-gray-500">balls</div>
@@ -86,15 +86,15 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
           </div>
         </div>
 
-        {/* Progress Bar for Strike Rate */}
-        <div className="mt-2">
-          <div className="flex justify-between text-xs text-gray-500 mb-1">
+        {/* Very Narrow Progress Bar for Strike Rate */}
+        <div className="mt-1">
+          <div className="flex justify-between text-xs text-gray-500 mb-0.5">
             <span>Strike Rate</span>
             <span>{stats.strikeRate}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-1.5">
+          <div className="w-full bg-gray-200 rounded-full h-1">
             <div 
-              className={`h-1.5 rounded-full transition-all duration-300 ${
+              className={`h-1 rounded-full transition-all duration-300 ${
                 parseFloat(stats.strikeRate) >= 120 ? 'bg-green-500' :
                 parseFloat(stats.strikeRate) >= 100 ? 'bg-yellow-500' :
                 'bg-red-500'
@@ -109,11 +109,11 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
     const stats = calculateBowlerStats();
     
     return (
-      <div className="bg-white rounded-lg shadow-sm p-3 border-l-4 border-red-500 bg-red-50">
-        <div className="flex items-center justify-between mb-2">
+      <div className="bg-white rounded-lg shadow-sm p-2 border-l-4 border-red-500 bg-red-50">
+        <div className="flex items-center justify-between mb-1">
           <div className="flex items-center">
-            <div className="font-semibold text-gray-900">{player.name}</div>
-            <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full font-medium">
+            <div className="font-semibold text-gray-900 text-sm">{player.name}</div>
+            <span className="ml-2 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium">
               Bowling
             </span>
           </div>
@@ -123,7 +123,7 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
           </div>
         </div>
         
-        <div className="grid grid-cols-4 gap-2 text-xs">
+        <div className="grid grid-cols-4 gap-2 text-xs mb-2">
           <div className="text-center">
             <div className="font-semibold text-gray-700">{stats.runs}</div>
             <div className="text-gray-500">runs</div>
@@ -142,15 +142,15 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
           </div>
         </div>
 
-        {/* Progress Bar for Economy Rate */}
-        <div className="mt-2">
-          <div className="flex justify-between text-xs text-gray-500 mb-1">
+        {/* Very Narrow Progress Bar for Economy Rate */}
+        <div className="mt-1">
+          <div className="flex justify-between text-xs text-gray-500 mb-0.5">
             <span>Economy Rate</span>
             <span>{stats.economy}</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-1.5">
+          <div className="w-full bg-gray-200 rounded-full h-1">
             <div 
-              className={`h-1.5 rounded-full transition-all duration-300 ${
+              className={`h-1 rounded-full transition-all duration-300 ${
                 parseFloat(stats.economy) <= 6 ? 'bg-green-500' :
                 parseFloat(stats.economy) <= 8 ? 'bg-yellow-500' :
                 'bg-red-500'
