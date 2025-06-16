@@ -30,7 +30,8 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
   } | null>(null);
   const [wicketType, setWicketType] = useState<WicketType | null>(null);
   const [showWicketOptions, setShowWicketOptions] = useState(false);
-  const [showExtraOptions, setShowExtraOptions] = useState(false);
+  const [showExtraRuns, setShowExtraRuns] = useState(false);
+  const [extraRuns, setExtraRuns] = useState(0);
 
   // Auto-rotate strike when needed
   useEffect(() => {
@@ -117,7 +118,6 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
     });
 
     onScoreUpdate(ball);
-    setShowExtraOptions(false);
   };
 
   const handleWicket = (type: WicketType) => {
@@ -194,38 +194,62 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
     return excluded;
   };
 
+  const handleExtraRuns = (runs: number) => {
+    setExtraRuns(runs);
+    setShowExtraRuns(true);
+  };
+
+  const handleExtraType = (type: 'wide' | 'noBall' | 'bye' | 'legBye') => {
+    const ball: Ball = {
+      id: Date.now().toString(),
+      striker: striker!,
+      nonStriker: nonStriker!,
+      bowler: bowler!,
+      runs: extraRuns,
+      isWide: type === 'wide',
+      isNoBall: type === 'noBall',
+      isBye: type === 'bye',
+      isLegBye: type === 'legBye',
+      isWicket: false,
+      timestamp: new Date().toISOString()
+    };
+    onScoreUpdate(ball);
+    setShowExtraRuns(false);
+    setExtraRuns(0);
+  };
+
   const currentGroup = authService.getCurrentGroup();
 
   return (
     <>
-      <div className="glass-effect rounded-2xl shadow-lg p-4">
+      <div className="bg-white rounded-2xl shadow-lg p-6">
         {/* Current Over Info */}
-        <div className="bg-emerald-50 rounded-xl p-3 mb-4 text-center border border-emerald-200">
-          <div className="text-sm text-emerald-700 font-bold">
+        <div className="bg-green-50 rounded-lg p-3 mb-4 text-center">
+          <div className="text-sm text-green-600 font-medium">
             Over {currentOver} • Ball {(match.battingTeam.balls % 6) + 1}
           </div>
           {bowler && (
-            <div className="text-xs text-emerald-600 mt-1 font-medium">
+            <div className="text-xs text-green-500 mt-1">
               Bowling: {bowler.name}
             </div>
           )}
         </div>
 
-        {/* Player Selection - Compact */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        {/* Player Selection */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
           <button
             onClick={() => setShowPlayerSelector({
               type: 'striker',
               title: 'Select Striker'
             })}
-            className={`p-2 rounded-lg border-2 transition-all text-xs ${
+            className={`p-3 rounded-lg border-2 transition-all ${
               striker
-                ? 'border-emerald-500 bg-emerald-50'
-                : 'border-gray-300 hover:border-emerald-300'
+                ? 'border-green-500 bg-green-50'
+                : 'border-gray-300 hover:border-green-300'
             }`}
           >
             <div className="text-xs text-gray-600 mb-1">Striker</div>
-            <div className="font-bold text-xs truncate">
+            <div className="font-semibold text-sm">
               {striker ? striker.name : 'Select'}
             </div>
           </button>
@@ -235,14 +259,14 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
               type: 'nonStriker',
               title: 'Select Non-Striker'
             })}
-            className={`p-2 rounded-lg border-2 transition-all text-xs ${
+            className={`p-3 rounded-lg border-2 transition-all ${
               nonStriker
                 ? 'border-blue-500 bg-blue-50'
                 : 'border-gray-300 hover:border-blue-300'
             }`}
           >
             <div className="text-xs text-gray-600 mb-1">Non-Striker</div>
-            <div className="font-bold text-xs truncate">
+            <div className="font-semibold text-sm">
               {nonStriker ? nonStriker.name : 'Select'}
             </div>
           </button>
@@ -252,28 +276,28 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
               type: 'bowler',
               title: 'Select Bowler'
             })}
-            className={`p-2 rounded-lg border-2 transition-all text-xs ${
+            className={`p-3 rounded-lg border-2 transition-all ${
               bowler
                 ? 'border-red-500 bg-red-50'
                 : 'border-gray-300 hover:border-red-300'
             }`}
           >
             <div className="text-xs text-gray-600 mb-1">Bowler</div>
-            <div className="font-bold text-xs truncate">
+            <div className="font-semibold text-sm">
               {bowler ? bowler.name : 'Select'}
             </div>
           </button>
         </div>
 
-        {/* Runs - Compact Grid */}
-        <div className="mb-4">
-          <h3 className="text-sm font-bold text-gray-700 mb-2">Runs</h3>
-          <div className="grid grid-cols-6 gap-2">
+        {/* Runs */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Runs</h3>
+          <div className="grid grid-cols-4 gap-3">
             {[0, 1, 2, 3, 4, 6].map((runs) => (
               <button
                 key={runs}
                 onClick={() => handleRun(runs)}
-                className={`py-3 rounded-xl font-bold text-lg transition-all ${
+                className={`py-4 rounded-xl font-bold text-lg transition-all ${
                   runs === 0
                     ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     : runs === 4
@@ -289,93 +313,87 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
           </div>
         </div>
 
-        {/* Extras & Wicket - Compact Row */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <button
-            onClick={() => setShowExtraOptions(!showExtraOptions)}
-            className="py-3 px-4 bg-yellow-500 text-white rounded-xl hover:bg-yellow-600 transition-colors font-semibold"
-          >
-            Extras
-          </button>
-          <button
-            onClick={() => setShowWicketOptions(!showWicketOptions)}
-            className="py-3 px-4 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-semibold"
-          >
-            Wicket
-          </button>
-        </div>
-
-        {/* Extra Options */}
-        {showExtraOptions && (
-          <div className="mb-4 grid grid-cols-2 gap-2">
+        {/* Extras */}
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Extras</h3>
+          <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => handleExtra('wide')}
-              className="py-2 px-3 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors text-sm font-medium"
+              onClick={() => handleExtraRuns(1)}
+              className="py-3 px-4 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
             >
               Wide
             </button>
             <button
-              onClick={() => handleExtra('noBall')}
-              className="py-2 px-3 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors text-sm font-medium"
+              onClick={() => handleExtraRuns(1)}
+              className="py-3 px-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
             >
               No Ball
             </button>
             <button
-              onClick={() => handleExtra('bye')}
-              className="py-2 px-3 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm font-medium"
+              onClick={() => handleExtraRuns(1)}
+              className="py-3 px-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
             >
               Bye
             </button>
             <button
-              onClick={() => handleExtra('legBye')}
-              className="py-2 px-3 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium"
+              onClick={() => handleExtraRuns(1)}
+              className="py-3 px-4 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
             >
               Leg Bye
             </button>
           </div>
-        )}
+        </div>
 
-        {/* Wicket Options */}
-        {showWicketOptions && (
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <button
-              onClick={() => handleWicket('bowled')}
-              className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-            >
-              Bowled
-            </button>
-            <button
-              onClick={() => handleWicket('caught')}
-              className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-            >
-              Caught
-            </button>
-            <button
-              onClick={() => handleWicket('lbw')}
-              className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-            >
-              LBW
-            </button>
-            <button
-              onClick={() => handleWicket('run_out')}
-              className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-            >
-              Run Out
-            </button>
-            <button
-              onClick={() => handleWicket('stumped')}
-              className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-            >
-              Stumped
-            </button>
-            <button
-              onClick={() => handleWicket('hit_wicket')}
-              className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
-            >
-              Hit Wicket
-            </button>
-          </div>
-        )}
+        {/* Wicket */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowWicketOptions(!showWicketOptions)}
+            className="w-full py-4 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-colors"
+          >
+            Wicket
+          </button>
+
+          {showWicketOptions && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => handleWicket('bowled')}
+                className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+              >
+                Bowled
+              </button>
+              <button
+                onClick={() => handleWicket('caught')}
+                className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+              >
+                Caught
+              </button>
+              <button
+                onClick={() => handleWicket('lbw')}
+                className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+              >
+                LBW
+              </button>
+              <button
+                onClick={() => handleWicket('run_out')}
+                className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+              >
+                Run Out
+              </button>
+              <button
+                onClick={() => handleWicket('stumped')}
+                className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+              >
+                Stumped
+              </button>
+              <button
+                onClick={() => handleWicket('hit_wicket')}
+                className="py-2 px-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm"
+              >
+                Hit Wicket
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Undo */}
         <button
@@ -387,7 +405,7 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           }`}
         >
-          <RotateCcw className="w-4 h-4 inline mr-2" />
+          <RotateCcw className="w-5 h-5 inline mr-2" />
           Undo Last Ball
         </button>
       </div>
@@ -403,6 +421,62 @@ export const ScoringPanel: React.FC<ScoringPanelProps> = ({
           allowAddPlayer={true}
           groupId={currentGroup?.id}
         />
+      )}
+
+      {/* Extra Runs Modal */}
+      {showExtraRuns && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-4 w-full max-w-sm">
+            <h3 className="text-lg font-semibold mb-4">Select Extra Runs</h3>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {[1, 2, 3, 4, 5, 6].map(runs => (
+                <button
+                  key={runs}
+                  onClick={() => setExtraRuns(runs)}
+                  className={`p-2 rounded-lg transition-colors ${
+                    extraRuns === runs
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                  }`}
+                >
+                  {runs}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setShowExtraRuns(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleExtraType('wide')}
+                className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+              >
+                Wide
+              </button>
+              <button
+                onClick={() => handleExtraType('noBall')}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                No Ball
+              </button>
+              <button
+                onClick={() => handleExtraType('bye')}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Bye
+              </button>
+              <button
+                onClick={() => handleExtraType('legBye')}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              >
+                Leg Bye
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

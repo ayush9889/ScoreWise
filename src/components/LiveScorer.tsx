@@ -442,9 +442,9 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const currentGroup = authService.getCurrentGroup();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 flex flex-col">
-      {/* Compact Header */}
-      <div className="glass-effect shadow-lg p-3 flex items-center justify-between flex-shrink-0">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50">
+      {/* Header */}
+      <div className="glass-effect shadow-lg p-3 flex items-center justify-between">
         <button
           onClick={onBack}
           className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
@@ -462,16 +462,25 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           >
             <Trophy className="w-5 h-5 text-gray-600" />
           </button>
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+          >
+            <Menu className="w-5 h-5 text-gray-600" />
+          </button>
         </div>
       </div>
 
       {/* Over Complete Message */}
       {overCompleteMessage && (
-        <div className="bg-green-100 border-l-4 border-green-500 p-2 m-2 rounded-lg flex-shrink-0">
+        <div className="bg-green-100 border-l-4 border-green-500 p-3 m-3 rounded-lg">
           <div className="flex items-center">
-            <AlertCircle className="w-4 h-4 text-green-600 mr-2" />
-            <p className="text-green-700 font-semibold text-sm">{overCompleteMessage}</p>
+            <AlertCircle className="w-5 h-5 text-green-600 mr-2" />
+            <p className="text-green-700 font-semibold">{overCompleteMessage}</p>
           </div>
+          <p className="text-green-600 text-sm mt-1">
+            Strike rotated. Please select new bowler to continue.
+          </p>
         </div>
       )}
 
@@ -484,133 +493,132 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         >
           <button
             onClick={handleInningsTransition}
-            className="gradient-primary text-white px-6 py-3 rounded-2xl font-bold shadow-premium hover:shadow-xl transition-all duration-200 flex items-center space-x-2"
+            className="gradient-primary text-white px-8 py-4 rounded-2xl font-bold text-lg shadow-premium hover:shadow-xl transition-all duration-200 flex items-center space-x-3"
           >
-            <Play className="w-5 h-5" />
+            <Play className="w-6 h-6" />
             <span>Start 2nd Innings</span>
-            <ArrowRight className="w-5 h-5" />
+            <ArrowRight className="w-6 h-6" />
           </button>
         </motion.div>
       )}
 
-      {/* Main Content - Scrollable */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-3 space-y-3">
-          {/* Compact Score Display */}
-          <ScoreDisplay match={match} />
-          
-          {/* Target Display - Only for Second Innings */}
-          {match.isSecondInnings && match.firstInningsScore && (
-            <div className="glass-effect rounded-2xl shadow-lg p-3">
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div>
-                  <h3 className="text-xs font-medium text-gray-500 mb-1">Target</h3>
-                  <p className="text-xl font-bold text-orange-600 font-display">{target}</p>
-                </div>
-                <div>
-                  <h3 className="text-xs font-medium text-gray-500 mb-1">Required</h3>
-                  <p className="text-xl font-bold text-red-600 font-display">{remainingRuns}</p>
-                </div>
-                <div>
-                  <h3 className="text-xs font-medium text-gray-500 mb-1">Balls Left</h3>
-                  <p className="text-xl font-bold text-blue-600 font-display">{remainingBalls}</p>
-                </div>
+      {/* Content */}
+      <div className="p-3 space-y-3">
+        <ScoreDisplay match={match} />
+        
+        {/* Target and Required Rate Display - Only for Second Innings */}
+        {match.isSecondInnings && match.firstInningsScore && (
+          <div className="glass-effect rounded-2xl shadow-lg p-4">
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-1">Target</h3>
+                <p className="text-2xl font-bold text-orange-600 font-display">{target}</p>
               </div>
-              
-              {/* Required Run Rate */}
-              <div className="mt-3 pt-3 border-t border-gray-200 text-center">
-                <h3 className="text-xs font-medium text-gray-500 mb-1">Required Run Rate</h3>
-                <p className="text-lg font-bold text-purple-600 font-display">
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-1">Required</h3>
+                <p className="text-2xl font-bold text-red-600 font-display">{remainingRuns}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-1">Balls Left</h3>
+                <p className="text-2xl font-bold text-blue-600 font-display">{remainingBalls}</p>
+              </div>
+            </div>
+            
+            {/* Required Run Rate */}
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="text-center">
+                <h3 className="text-sm font-medium text-gray-500 mb-1">Required Run Rate</h3>
+                <p className="text-xl font-bold text-purple-600 font-display">
                   {remainingBalls > 0 ? (remainingRuns / (remainingBalls / 6)).toFixed(2) : '0.00'} per over
                 </p>
               </div>
             </div>
-          )}
-          
-          {/* Compact Live Stats */}
-          {match.currentStriker && match.currentNonStriker && match.currentBowler && (
-            <div className="space-y-2">
-              <LiveStatsBar 
-                player={match.currentStriker} 
-                balls={match.balls} 
-                type="batsman" 
-                isStriker={true}
-              />
-              <LiveStatsBar 
-                player={match.currentNonStriker} 
-                balls={match.balls} 
-                type="batsman" 
-                isStriker={false}
-              />
-              <LiveStatsBar 
-                player={match.currentBowler} 
-                balls={match.balls} 
-                type="bowler"
-              />
-            </div>
-          )}
-          
-          {/* Player Selection Prompt */}
-          {(!match.currentStriker || !match.currentNonStriker || !match.currentBowler) && (
-            <div className="glass-effect rounded-2xl shadow-lg p-4 text-center">
-              <h3 className="text-lg font-bold text-gray-900 mb-3 font-display">Setup Required</h3>
-              <p className="text-gray-600 mb-3 text-sm">Please select players to start scoring</p>
-              <div className="space-y-2">
-                {!match.currentStriker && (
-                  <button
-                    onClick={() => setShowBatsmanSelector(true)}
-                    className="w-full gradient-primary text-white py-2 px-4 rounded-xl font-semibold text-sm"
-                  >
-                    Select Opening Batsmen
-                  </button>
-                )}
-                {match.currentStriker && match.currentNonStriker && !match.currentBowler && (
-                  <button
-                    onClick={() => setShowBowlerSelector(true)}
-                    className="w-full gradient-secondary text-white py-2 px-4 rounded-xl font-semibold text-sm"
-                  >
-                    Select Opening Bowler
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          
-          {/* Compact Scoring Panel */}
-          {match.currentStriker && match.currentNonStriker && match.currentBowler && (
-            <ScoringPanel
-              match={match}
-              onScoreUpdate={handleScoreUpdate}
-              onUndo={handleUndo}
-              canUndo={actionHistory.length > 0}
-              pendingStrikeRotation={pendingStrikeRotation}
-              onStrikeRotation={handleStrikeRotation}
+          </div>
+        )}
+        
+        {/* Enhanced Live Stats Bars - Show when players are selected */}
+        {match.currentStriker && match.currentNonStriker && match.currentBowler && (
+          <div className="space-y-3">
+            <LiveStatsBar 
+              player={match.currentStriker} 
+              balls={match.balls} 
+              type="batsman" 
+              isStriker={true}
             />
-          )}
-
-          {/* Compact Recent Balls */}
-          {match.balls.length > 0 && (
-            <div className="glass-effect rounded-2xl shadow-lg p-3">
-              <h3 className="font-bold text-gray-900 text-sm mb-2 font-display">Recent Balls</h3>
-              <div className="space-y-1">
-                {match.balls.slice(-3).reverse().map((ball, index) => (
-                  <div key={ball.id} className="flex justify-between items-center py-1 border-b border-gray-100 last:border-b-0 text-xs">
-                    <div className="text-gray-600 font-medium">
-                      {ball.overNumber}.{ball.ballNumber % 6 || 6}
-                    </div>
-                    <div className="flex-1 mx-2 text-gray-800 truncate">{ball.commentary}</div>
-                    <div className="font-bold text-emerald-600">
-                      {ball.runs}{ball.isWide ? 'wd' : ball.isNoBall ? 'nb' : ''}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <LiveStatsBar 
+              player={match.currentNonStriker} 
+              balls={match.balls} 
+              type="batsman" 
+              isStriker={false}
+            />
+            <LiveStatsBar 
+              player={match.currentBowler} 
+              balls={match.balls} 
+              type="bowler"
+            />
+          </div>
+        )}
+        
+        {/* Show player selection prompt if players not selected */}
+        {(!match.currentStriker || !match.currentNonStriker || !match.currentBowler) && (
+          <div className="glass-effect rounded-2xl shadow-lg p-6 text-center">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 font-display">Setup Required</h3>
+            <p className="text-gray-600 mb-4">Please select players to start scoring</p>
+            <div className="space-y-3">
+              {!match.currentStriker && (
+                <button
+                  onClick={() => setShowBatsmanSelector(true)}
+                  className="w-full gradient-primary text-white py-3 px-4 rounded-xl font-semibold"
+                >
+                  Select Opening Batsmen
+                </button>
+              )}
+              {match.currentStriker && match.currentNonStriker && !match.currentBowler && (
+                <button
+                  onClick={() => setShowBowlerSelector(true)}
+                  className="w-full gradient-secondary text-white py-3 px-4 rounded-xl font-semibold"
+                >
+                  Select Opening Bowler
+                </button>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+        
+        {/* Only show scoring panel when all players are selected */}
+        {match.currentStriker && match.currentNonStriker && match.currentBowler && (
+          <ScoringPanel
+            match={match}
+            onScoreUpdate={handleScoreUpdate}
+            onUndo={handleUndo}
+            canUndo={actionHistory.length > 0}
+            pendingStrikeRotation={pendingStrikeRotation}
+            onStrikeRotation={handleStrikeRotation}
+          />
+        )}
+
+        {/* Recent Balls */}
+        {match.balls.length > 0 && (
+          <div className="glass-effect rounded-2xl shadow-lg p-4">
+            <h3 className="font-bold text-gray-900 text-sm mb-3 font-display">Recent Balls</h3>
+            <div className="space-y-2">
+              {match.balls.slice(-5).reverse().map((ball, index) => (
+                <div key={ball.id} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0 text-sm">
+                  <div className="text-gray-600 font-medium">
+                    {ball.overNumber}.{ball.ballNumber % 6 || 6}
+                  </div>
+                  <div className="flex-1 mx-3 text-gray-800">{ball.commentary}</div>
+                  <div className="font-bold text-emerald-600">
+                    {ball.runs}{ball.isWide ? 'wd' : ball.isNoBall ? 'nb' : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* All Modals */}
+      {/* Innings Break Modal */}
       <AnimatePresence>
         {showInningsBreak && (
           <InningsBreakModal
@@ -620,6 +628,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         )}
       </AnimatePresence>
 
+      {/* Bowler Selector Modal */}
       {showBowlerSelector && (
         <PlayerSelector
           title="Select New Bowler"
@@ -638,6 +647,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         />
       )}
 
+      {/* New Batsman Selector Modal */}
       {showNewBatsmanSelector && (
         <PlayerSelector
           title="Select New Batsman"
@@ -650,6 +660,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         />
       )}
 
+      {/* Scorecard Modal */}
       {showScorecard && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -672,6 +683,31 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         </motion.div>
       )}
 
+      {/* MOTM Selector Modal */}
+      {showMotmSelector && (
+        <PlayerSelector
+          title="Select Man of the Match"
+          onPlayerSelect={handleMotmSelect}
+          onClose={() => setShowMotmSelector(false)}
+          players={[...match.team1.players, ...match.team2.players]}
+          showOnlyAvailable={false}
+          allowAddPlayer={false}
+        />
+      )}
+
+      {/* Add Player Modal */}
+      {showAddPlayerModal && (
+        <PlayerSelector
+          title={`Add ${addPlayerType === 'batting' ? 'Batsman' : 'Bowler'}`}
+          onPlayerSelect={handleAddPlayer}
+          onClose={() => setShowAddPlayerModal(false)}
+          players={allPlayers}
+          showOnlyAvailable={false}
+          allowAddPlayer={true}
+          groupId={currentGroup?.id}
+        />
+      )}
+
       <AnimatePresence>
         {showInningsSetup && (
           <motion.div
@@ -680,10 +716,10 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
           >
-            <div className="glass-effect rounded-2xl p-6 w-full max-w-lg m-4">
-              <h2 className="text-2xl font-bold mb-4 font-display">Second Innings Setup</h2>
+            <div className="glass-effect rounded-2xl p-8 w-full max-w-2xl m-4">
+              <h2 className="text-2xl font-bold mb-6 font-display">Second Innings Setup</h2>
               
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div className="bg-gray-50 p-4 rounded-xl">
                   <h3 className="font-semibold mb-2 font-display">First Innings Summary</h3>
                   <p className="text-gray-600">
@@ -698,12 +734,14 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
                   </p>
                 </div>
 
-                <button
-                  onClick={handleInningsSetup}
-                  className="w-full gradient-primary text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition-all duration-200"
-                >
-                  Start Second Innings
-                </button>
+                <div className="flex justify-end space-x-4">
+                  <button
+                    onClick={handleInningsSetup}
+                    className="gradient-primary text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition-all duration-200"
+                  >
+                    Start Second Innings
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -756,24 +794,24 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Compact Save Status */}
-      <div className="fixed bottom-3 right-3 z-50">
+      {/* Save Status Indicator */}
+      <div className="fixed bottom-4 right-4 z-50">
         {isSaving && (
-          <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-lg shadow-lg flex items-center space-x-2 text-sm">
-            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-800"></div>
+          <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-xl shadow-lg flex items-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800"></div>
             <span className="font-medium">Saving...</span>
           </div>
         )}
         {saveError && (
-          <div className="bg-orange-100 text-orange-800 px-3 py-1 rounded-lg shadow-lg flex items-center space-x-2 text-sm">
-            <AlertCircle className="w-3 h-3" />
-            <span className="font-medium">Offline</span>
+          <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-xl shadow-lg flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4" />
+            <span className="text-sm font-medium">{saveError}</span>
           </div>
         )}
         {!isSaving && !saveError && (
-          <div className="bg-green-100 text-green-800 px-3 py-1 rounded-lg shadow-lg flex items-center space-x-2 text-sm">
+          <div className="bg-green-100 text-green-800 px-4 py-2 rounded-xl shadow-lg flex items-center space-x-2">
             <div className="w-2 h-2 bg-green-600 rounded-full"></div>
-            <span className="font-medium">Synced</span>
+            <span className="text-sm font-medium">Synced</span>
           </div>
         )}
       </div>
