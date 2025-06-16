@@ -436,7 +436,12 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
 
   const getAvailableBowlers = (): Player[] => {
     const nextOver = match.battingTeam.overs + 1;
-    return CricketEngine.getAvailableBowlers(match, nextOver);
+    const availableBowlers = CricketEngine.getAvailableBowlers(match, nextOver);
+    
+    console.log(`🏏 GETTING AVAILABLE BOWLERS FOR SELECTOR:`);
+    console.log(`Available bowlers:`, availableBowlers.map(b => b.name));
+    
+    return availableBowlers;
   };
 
   const getAvailableBatsmen = (): Player[] => {
@@ -568,15 +573,15 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         />
       )}
 
-      {/* CRITICAL: Bowler Selector Modal with ABSOLUTE filtering */}
+      {/* CRITICAL: Bowler Selector Modal with ABSOLUTE filtering and MANDATORY selection */}
       {showBowlerSelector && (
         <PlayerSelector
           title="🚫 MANDATORY: Select New Bowler (Cannot Bowl Consecutive Overs)"
           onPlayerSelect={handleBowlerChange}
           onClose={() => {
-            // Don't allow closing without selecting a bowler when it's mandatory
+            // CRITICAL: Don't allow closing without selecting a bowler when it's mandatory
             if (needsBowlerChange) {
-              alert('🚫 You must select a new bowler to continue!\n\nSame bowler cannot bowl consecutive overs.');
+              alert('🚫 You MUST select a new bowler to continue!\n\nSame bowler cannot bowl consecutive overs.\n\nThis is a fundamental cricket rule.');
               return;
             }
             setShowBowlerSelector(false);
@@ -584,6 +589,12 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
             setNeedsBowlerChange(false);
           }}
           players={getAvailableBowlers()}
+          excludePlayerIds={[
+            match.currentBowler?.id || '',
+            match.previousBowler?.id || '',
+            match.currentStriker?.id || '',
+            match.currentNonStriker?.id || ''
+          ].filter(Boolean)}
           showOnlyAvailable={true}
           allowAddPlayer={true}
           groupId={currentGroup?.id}

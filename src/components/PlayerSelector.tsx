@@ -190,6 +190,21 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
     }
   };
 
+  // Handle player selection with proper validation
+  const handlePlayerClick = (player: Player) => {
+    console.log(`🏏 PLAYER SELECTED: ${player.name} (ID: ${player.id})`);
+    
+    // Validate that this player is not excluded
+    if (excludePlayerIds.includes(player.id)) {
+      console.log(`❌ SELECTION REJECTED: ${player.name} is excluded`);
+      alert(`❌ ${player.name} cannot be selected at this time.`);
+      return;
+    }
+    
+    console.log(`✅ SELECTION CONFIRMED: ${player.name}`);
+    onPlayerSelect(player);
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col">
@@ -378,11 +393,18 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
 
         {/* Player List */}
         <div className="flex-1 overflow-y-auto p-4">
+          {/* Show available players count */}
+          {filteredPlayers.length > 0 && (
+            <div className="mb-3 text-sm text-gray-600">
+              {filteredPlayers.length} player{filteredPlayers.length !== 1 ? 's' : ''} available
+            </div>
+          )}
+
           {filteredPlayers.map((player) => (
             <button
               key={player.id}
-              onClick={() => onPlayerSelect(player)}
-              className="w-full p-4 text-left border border-gray-200 rounded-lg mb-2 hover:bg-green-50 hover:border-green-300 transition-colors"
+              onClick={() => handlePlayerClick(player)}
+              className="w-full p-4 text-left border border-gray-200 rounded-lg mb-2 hover:bg-green-50 hover:border-green-300 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500"
             >
               <div className="flex items-center">
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-3 overflow-hidden">
