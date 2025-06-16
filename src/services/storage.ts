@@ -2,7 +2,7 @@ import { Match, Player } from '../types/cricket';
 import { User, Group, Invitation } from '../types/auth';
 
 const DB_NAME = 'CricketScorerDB';
-const DB_VERSION = 2;
+const DB_VERSION = 3; // Increment version to trigger schema update
 
 class StorageService {
   private db: IDBDatabase | null = null;
@@ -33,25 +33,28 @@ class StorageService {
           matchesStore.createIndex('startTime', 'startTime', { unique: false });
         }
 
-        // Create users store
-        if (!db.objectStoreNames.contains('users')) {
-          const usersStore = db.createObjectStore('users', { keyPath: 'id' });
-          usersStore.createIndex('email', 'email', { unique: true });
+        // Handle users store - recreate if exists to fix unique constraint
+        if (db.objectStoreNames.contains('users')) {
+          db.deleteObjectStore('users');
         }
+        const usersStore = db.createObjectStore('users', { keyPath: 'id' });
+        usersStore.createIndex('email', 'email', { unique: false }); // Changed to non-unique
 
-        // Create groups store
-        if (!db.objectStoreNames.contains('groups')) {
-          const groupsStore = db.createObjectStore('groups', { keyPath: 'id' });
-          groupsStore.createIndex('inviteCode', 'inviteCode', { unique: true });
-          groupsStore.createIndex('createdBy', 'createdBy', { unique: false });
+        // Handle groups store - recreate if exists to ensure clean state
+        if (db.objectStoreNames.contains('groups')) {
+          db.deleteObjectStore('groups');
         }
+        const groupsStore = db.createObjectStore('groups', { keyPath: 'id' });
+        groupsStore.createIndex('inviteCode', 'inviteCode', { unique: true });
+        groupsStore.createIndex('createdBy', 'createdBy', { unique: false });
 
-        // Create invitations store
-        if (!db.objectStoreNames.contains('invitations')) {
-          const invitationsStore = db.createObjectStore('invitations', { keyPath: 'id' });
-          invitationsStore.createIndex('groupId', 'groupId', { unique: false });
-          invitationsStore.createIndex('invitedEmail', 'invitedEmail', { unique: false });
+        // Handle invitations store - recreate if exists
+        if (db.objectStoreNames.contains('invitations')) {
+          db.deleteObjectStore('invitations');
         }
+        const invitationsStore = db.createObjectStore('invitations', { keyPath: 'id' });
+        invitationsStore.createIndex('groupId', 'groupId', { unique: false });
+        invitationsStore.createIndex('invitedEmail', 'invitedEmail', { unique: false });
 
         // Create settings store
         if (!db.objectStoreNames.contains('settings')) {
@@ -255,6 +258,32 @@ class StorageService {
 
       request.onerror = () => reject(request.error);
       request.onsuccess = () => resolve(request.result || null);
+    });
+  }
+
+  // Clear all data (for debugging)
+  async clearAllData(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['players', 'matches', 'users', 'groups', 'invitations', 'settings'], 'readwrite');
+      
+      const stores = ['players', 'matches', 'users', 'groups', 'invitations', 'settings'];
+      let completed = 0;
+      
+      stores.forEach(storeName => {
+        const store = transaction.objectStore(storeName);
+        const request = store.clear();
+        
+        request.onsuccess = () => {
+          completed++;
+          if (completed === stores.length) {
+            resolve();
+          }
+        };
+        
+        request.onerror = () => reject(request.error);
+      });
     });
   }
 
