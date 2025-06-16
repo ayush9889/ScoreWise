@@ -95,7 +95,8 @@ export const cloudStorageService = {
       
       // Validate match data
       if (!match.id) {
-        throw new Error('Match ID is required');
+        console.warn('Match ID is required for cloud save, skipping');
+        return;
       }
 
       const matchData = prepareMatchData(match);
@@ -106,23 +107,21 @@ export const cloudStorageService = {
     } catch (error) {
       console.error('Error saving match to cloud:', error);
       
-      // Handle permission errors gracefully
+      // Handle permission errors gracefully - don't throw, just log and continue
       if (isPermissionError(error)) {
-        console.log('Permission denied - continuing in offline mode');
+        console.log('Permission denied - continuing in offline mode. Please check Firebase security rules.');
         return;
       }
       
-      // Don't throw error for connection issues - let the app work offline
+      // Handle network errors gracefully - don't throw, just log and continue
       if (isNetworkError(error)) {
         console.log('Network issue detected, continuing in offline mode');
         return;
       }
       
-      // Only throw for other types of errors
-      if (error instanceof Error) {
-        throw new Error(`Failed to save match: ${error.message}`);
-      }
-      throw new Error('Failed to save match to cloud storage');
+      // For any other errors, log them but don't throw to prevent app crashes
+      console.warn('Unexpected error saving to cloud storage, continuing in offline mode:', error);
+      return;
     }
   },
 
@@ -132,7 +131,8 @@ export const cloudStorageService = {
       console.log('Attempting to get match from cloud:', matchId);
       
       if (!matchId) {
-        throw new Error('Match ID is required');
+        console.warn('Match ID is required for cloud retrieval');
+        return null;
       }
 
       // Check if we're online
@@ -237,7 +237,8 @@ export const cloudStorageService = {
       console.log('Attempting to get team matches:', teamName);
       
       if (!teamName) {
-        throw new Error('Team name is required');
+        console.warn('Team name is required for team match retrieval');
+        return [];
       }
 
       // Check if we're online
