@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Menu, BarChart3, RefreshCw, AlertCircle, Trophy, UserPlus, X, Wifi, WifiOff } from 'lucide-react';
 import { Match, Ball, Player } from '../types/cricket';
-import { ScoreDisplay } from './ScoreDisplay';
+import { CompactScoreDisplay } from './CompactScoreDisplay';
 import { ScoringPanel } from './ScoringPanel';
 import { PlayerSelector } from './PlayerSelector';
-import { LiveStatsBar } from './LiveStatsBar';
 import { InningsBreakModal } from './InningsBreakModal';
 import { CricketEngine } from '../services/cricketEngine';
 import { storageService } from '../services/storage';
-import { LiveScoreboard } from './LiveScoreboard';
 import { ScorecardModal } from './ScorecardModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cloudStorageService } from '../services/cloudStorageService';
@@ -517,50 +515,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
 
       {/* Content */}
       <div className="p-2 space-y-2">
-        <ScoreDisplay match={match} />
-        
-        {/* Target and Required Rate Display */}
-        {match.isSecondInnings && (
-          <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <h3 className="text-sm font-medium text-gray-500">Target</h3>
-                <p className="text-2xl font-bold text-gray-900">{target}</p>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-500">Required</h3>
-                <p className="text-2xl font-bold text-gray-900">{remainingRuns}</p>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-500">Balls Left</h3>
-                <p className="text-2xl font-bold text-gray-900">{remainingBalls}</p>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Live Stats Bars */}
-        {match.currentStriker && match.currentNonStriker && match.currentBowler && (
-          <div className="space-y-1">
-            <LiveStatsBar 
-              player={match.currentStriker} 
-              balls={match.balls} 
-              type="batsman" 
-              isStriker={true}
-            />
-            <LiveStatsBar 
-              player={match.currentNonStriker} 
-              balls={match.balls} 
-              type="batsman" 
-              isStriker={false}
-            />
-            <LiveStatsBar 
-              player={match.currentBowler} 
-              balls={match.balls} 
-              type="bowler"
-            />
-          </div>
-        )}
+        <CompactScoreDisplay match={match} />
         
         <ScoringPanel
           match={match}

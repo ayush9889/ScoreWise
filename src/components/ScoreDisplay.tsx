@@ -19,9 +19,9 @@ export const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ match }) => {
   };
 
   const calculateRequiredRate = (): string | null => {
-    if (match.currentInnings === 1) return null;
+    if (!match.isSecondInnings) return null;
     
-    const target = match.team1.score + 1;
+    const target = match.firstInningsScore + 1;
     const remaining = target - match.battingTeam.score;
     const ballsLeft = (match.totalOvers * 6) - (match.battingTeam.overs * 6 + match.battingTeam.balls);
     
@@ -29,85 +29,76 @@ export const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ match }) => {
     return ((remaining / ballsLeft) * 6).toFixed(2);
   };
 
+  const calculatePartnership = () => {
+    if (!match.currentStriker || !match.currentNonStriker) return { runs: 0, balls: 0 };
+    
+    // Find when current partnership started (last wicket or start of innings)
+    const lastWicketIndex = match.balls.map((ball, index) => ball.isWicket ? index : -1)
+      .filter(index => index !== -1)
+      .pop() || -1;
+    
+    const partnershipBalls = match.balls.slice(lastWicketIndex + 1);
+    const runs = partnershipBalls.reduce((sum, ball) => sum + ball.runs, 0);
+    const balls = partnershipBalls.filter(ball => !ball.isWide && !ball.isNoBall).length;
+    
+    return { runs, balls };
+  };
+
   const requiredRate = calculateRequiredRate();
   const currentRate = calculateRunRate(match.battingTeam.score, match.battingTeam.overs * 6 + match.battingTeam.balls);
+  const partnership = calculatePartnership();
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-900">
-          {match.battingTeam.name} vs {match.bowlingTeam.name}
-        </h2>
-        <div className="flex items-center text-sm text-gray-600">
-          <Clock className="w-4 h-4 mr-1" />
-          {match.currentInnings === 1 ? '1st' : '2nd'} Innings
-        </div>
+    <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+      {/* Toss Info */}
+      <div className="text-sm text-gray-600 mb-2">
+        {match.tossWinner} opt to {match.tossDecision}
       </div>
 
-      {/* Main Score */}
-      <div className="text-center mb-6">
-        <div className="text-4xl font-bold text-green-600 mb-2">
-          {match.battingTeam.score}/{match.battingTeam.wickets}
+      {/* Team Score */}
+      <div className="mb-3">
+        <div className="text-2xl font-bold text-gray-900 mb-1">
+          {match.battingTeam.name}
         </div>
-        <div className="text-lg text-gray-600">
-          {formatOvers(match.battingTeam.overs * 6 + match.battingTeam.balls)} / {match.totalOvers} overs
-        </div>
-      </div>
-
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-blue-50 rounded-lg p-3 text-center">
-          <div className="flex items-center justify-center mb-1">
-            <TrendingUp className="w-4 h-4 text-blue-600 mr-1" />
-            <span className="text-sm font-medium text-blue-600">Run Rate</span>
+        <div className="flex items-baseline space-x-4">
+          <div className="text-4xl font-bold text-gray-900">
+            {match.battingTeam.score}-{match.battingTeam.wickets}
           </div>
-          <div className="text-lg font-bold text-blue-700">{currentRate}</div>
+          <div className="text-lg text-gray-600">
+            ({formatOvers(match.battingTeam.overs * 6 + match.battingTeam.balls)})
+          </div>
         </div>
+      </div>
 
-        {requiredRate && (
-          <div className="bg-orange-50 rounded-lg p-3 text-center">
-            <div className="flex items-center justify-center mb-1">
-              <Target className="w-4 h-4 text-orange-600 mr-1" />
-              <span className="text-sm font-medium text-orange-600">Required</span>
-            </div>
-            <div className="text-lg font-bold text-orange-700">{requiredRate}</div>
+      {/* Current Run Rate and Partnership */}
+      <div className="flex items-center space-x-6 text-sm text-gray-600 mb-4">
+        <div>
+          <span className="font-medium">CRR</span> {currentRate}
+        </div>
+        {partnership.balls > 0 && (
+          <div>
+            <span className="font-medium">P'SHIP</span> {partnership.runs}({partnership.balls})
           </div>
         )}
+        {requiredRate && (
+          <div>
+            <span className="font-medium">RRR</span> {requiredRate}
+          </div>
+        )}
+        <div className="ml-auto">
+          <button className="text-blue-600 font-medium">More</button>
+        </div>
       </div>
 
-      {/* Target Display */}
-      {match.currentInnings === 2 && (
-        <div className="mt-4 p-3 bg-gray-50 rounded-lg text-center">
-          <div className="text-sm text-gray-600">Target</div>
-          <div className="text-xl font-bold text-gray-900">
-            {match.team1.score + 1} runs
-          </div>
-          <div className="text-sm text-gray-600">
-            {match.team1.score + 1 - match.battingTeam.score} runs needed from{' '}
+      {/* Target Display for Second Innings */}
+      {match.isSecondInnings && (
+        <div className="bg-orange-50 rounded-lg p-3 mb-4">
+          <div className="text-sm text-orange-700">
+            Target: {match.firstInningsScore + 1} • Need {match.firstInningsScore + 1 - match.battingTeam.score} runs from{' '}
             {(match.totalOvers * 6) - (match.battingTeam.overs * 6 + match.battingTeam.balls)} balls
           </div>
         </div>
       )}
-
-      {/* Extras */}
-      <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
-        <div className="text-center">
-          <div className="text-gray-500">Wides</div>
-          <div className="font-semibold">{match.battingTeam.extras.wides}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-gray-500">No Balls</div>
-          <div className="font-semibold">{match.battingTeam.extras.noBalls}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-gray-500">Byes</div>
-          <div className="font-semibold">{match.battingTeam.extras.byes}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-gray-500">Leg Byes</div>
-          <div className="font-semibold">{match.battingTeam.extras.legByes}</div>
-        </div>
-      </div>
     </div>
   );
 };
