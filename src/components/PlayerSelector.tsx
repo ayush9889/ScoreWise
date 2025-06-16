@@ -39,11 +39,20 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
 
   // Update filtered players when search term or players change
   useEffect(() => {
-    let filtered = players.filter(player => 
-      !excludePlayerIds.includes(player.id) &&
-      (player.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       (player.shortId && player.shortId.toLowerCase().includes(searchTerm.toLowerCase())))
-    );
+    console.log(`🔍 FILTERING PLAYERS:`, {
+      totalPlayers: players.length,
+      excludedIds: excludePlayerIds,
+      searchTerm
+    });
+
+    let filtered = players.filter(player => {
+      const notExcluded = !excludePlayerIds.includes(player.id);
+      const matchesSearch = player.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (player.shortId && player.shortId.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      console.log(`Player ${player.name}: excluded=${!notExcluded}, matches=${matchesSearch}`);
+      return notExcluded && matchesSearch;
+    });
 
     // Sort players: group members first, then by name
     filtered.sort((a, b) => {
@@ -52,6 +61,7 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
       return a.name.localeCompare(b.name);
     });
 
+    console.log(`✅ FILTERED RESULT: ${filtered.length} players available:`, filtered.map(p => p.name));
     setFilteredPlayers(filtered);
   }, [players, searchTerm, excludePlayerIds]);
 
@@ -126,6 +136,7 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
         }
       }
 
+      console.log(`✅ PLAYER CREATED AND SELECTED: ${player.name}`);
       onPlayerSelect(player);
       
       // Reset form
@@ -178,6 +189,7 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
       };
 
       await storageService.savePlayer(player);
+      console.log(`✅ GUEST PLAYER CREATED AND SELECTED: ${player.name}`);
       onPlayerSelect(player);
       
       // Reset form
@@ -190,19 +202,42 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
     }
   };
 
-  // Handle player selection with proper validation
+  // Handle player selection with proper validation and detailed logging
   const handlePlayerClick = (player: Player) => {
-    console.log(`🏏 PLAYER SELECTED: ${player.name} (ID: ${player.id})`);
+    console.log(`\n🏏 PLAYER SELECTION ATTEMPT:`);
+    console.log(`Player: ${player.name} (ID: ${player.id})`);
+    console.log(`Excluded IDs:`, excludePlayerIds);
     
-    // Validate that this player is not excluded
+    // CRITICAL: Validate that this player is not excluded
     if (excludePlayerIds.includes(player.id)) {
-      console.log(`❌ SELECTION REJECTED: ${player.name} is excluded`);
-      alert(`❌ ${player.name} cannot be selected at this time.`);
+      console.log(`❌ SELECTION REJECTED: ${player.name} is in excluded list`);
+      alert(`❌ ${player.name} cannot be selected at this time.\n\nThis player is currently excluded from selection.`);
       return;
     }
     
-    console.log(`✅ SELECTION CONFIRMED: ${player.name}`);
-    onPlayerSelect(player);
+    console.log(`✅ SELECTION VALIDATION PASSED`);
+    console.log(`🔄 CALLING onPlayerSelect with:`, player.name);
+    
+    try {
+      onPlayerSelect(player);
+      console.log(`✅ PLAYER SELECTION COMPLETED: ${player.name}`);
+    } catch (error) {
+      console.error(`❌ ERROR IN PLAYER SELECTION:`, error);
+      alert(`Error selecting player: ${error}`);
+    }
+  };
+
+  // Handle modal close with validation for mandatory selections
+  const handleClose = () => {
+    // Check if this is a mandatory bowler selection (title contains "MANDATORY")
+    if (title.includes('MANDATORY') || title.includes('🚫')) {
+      console.log(`🚫 ATTEMPTED TO CLOSE MANDATORY SELECTION`);
+      alert('🚫 You MUST select a bowler to continue!\n\nThis selection is mandatory to proceed with the match.');
+      return;
+    }
+    
+    console.log(`✅ CLOSING PLAYER SELECTOR`);
+    onClose();
   };
 
   return (
@@ -212,7 +247,7 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{title}</h2>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="text-gray-500 hover:text-gray-700"
             >
               <X size={24} />
@@ -404,7 +439,7 @@ export const PlayerSelector: React.FC<PlayerSelectorProps> = ({
             <button
               key={player.id}
               onClick={() => handlePlayerClick(player)}
-              className="w-full p-4 text-left border border-gray-200 rounded-lg mb-2 hover:bg-green-50 hover:border-green-300 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full p-4 text-left border border-gray-200 rounded-lg mb-2 hover:bg-green-50 hover:border-green-300 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 active:bg-green-100"
             >
               <div className="flex items-center">
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-3 overflow-hidden">
