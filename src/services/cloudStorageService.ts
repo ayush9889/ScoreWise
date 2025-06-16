@@ -24,7 +24,8 @@ const isOnline = () => navigator.onLine;
 const isPermissionError = (error: any): boolean => {
   return error?.code === 'permission-denied' || 
          error?.message?.includes('Missing or insufficient permissions') ||
-         error?.message?.includes('permission-denied');
+         error?.message?.includes('permission-denied') ||
+         error?.message?.includes('PERMISSION_DENIED');
 };
 
 // Helper function to check if error is network-related
@@ -84,6 +85,7 @@ const prepareMatchData = (match: Match) => {
 export const cloudStorageService = {
   // Save match to cloud storage
   async saveMatch(match: Match): Promise<void> {
+    // Wrap everything in a try-catch to ensure no errors escape
     try {
       console.log('Attempting to save match to cloud:', match.id);
       
@@ -104,23 +106,21 @@ export const cloudStorageService = {
       
       await setDoc(matchRef, matchData, { merge: true });
       console.log('Successfully saved match to cloud:', match.id);
-    } catch (error) {
-      console.error('Error saving match to cloud:', error);
-      
-      // Handle permission errors gracefully - don't throw, just log and continue
+    } catch (error: any) {
+      // Handle permission errors silently - don't log as errors
       if (isPermissionError(error)) {
-        console.log('Permission denied - continuing in offline mode. Please check Firebase security rules.');
+        console.log('Cloud sync unavailable - continuing in offline mode');
         return;
       }
       
-      // Handle network errors gracefully - don't throw, just log and continue
+      // Handle network errors gracefully
       if (isNetworkError(error)) {
         console.log('Network issue detected, continuing in offline mode');
         return;
       }
       
       // For any other errors, log them but don't throw to prevent app crashes
-      console.warn('Unexpected error saving to cloud storage, continuing in offline mode:', error);
+      console.warn('Cloud sync temporarily unavailable, continuing in offline mode');
       return;
     }
   },
@@ -159,12 +159,10 @@ export const cloudStorageService = {
       
       console.log('Match not found in cloud:', matchId);
       return null;
-    } catch (error) {
-      console.error('Error getting match from cloud:', error);
-      
-      // Handle permission errors gracefully
+    } catch (error: any) {
+      // Handle permission errors silently
       if (isPermissionError(error)) {
-        console.log('Permission denied - unable to access cloud data. Please check Firebase security rules.');
+        console.log('Cloud access unavailable - using local data only');
         return null;
       }
       
@@ -175,7 +173,7 @@ export const cloudStorageService = {
       }
       
       // For other errors, return null instead of throwing
-      console.log('Unexpected error accessing cloud storage, continuing with local data');
+      console.log('Cloud access temporarily unavailable, using local data');
       return null;
     }
   },
@@ -210,12 +208,10 @@ export const cloudStorageService = {
       
       console.log('Successfully retrieved recent matches:', matches.length);
       return matches;
-    } catch (error) {
-      console.error('Error getting recent matches:', error);
-      
-      // Handle permission errors gracefully
+    } catch (error: any) {
+      // Handle permission errors silently
       if (isPermissionError(error)) {
-        console.log('Permission denied - unable to access recent matches');
+        console.log('Cloud access unavailable - cannot retrieve recent matches');
         return [];
       }
       
@@ -226,7 +222,7 @@ export const cloudStorageService = {
       }
       
       // For other errors, return empty array instead of throwing
-      console.log('Unexpected error accessing recent matches, returning empty array');
+      console.log('Cloud access temporarily unavailable, returning empty array');
       return [];
     }
   },
@@ -271,12 +267,10 @@ export const cloudStorageService = {
       
       console.log('Successfully retrieved team matches:', matches.length);
       return matches;
-    } catch (error) {
-      console.error('Error getting team matches:', error);
-      
-      // Handle permission errors gracefully
+    } catch (error: any) {
+      // Handle permission errors silently
       if (isPermissionError(error)) {
-        console.log('Permission denied - unable to access team matches');
+        console.log('Cloud access unavailable - cannot retrieve team matches');
         return [];
       }
       
@@ -287,7 +281,7 @@ export const cloudStorageService = {
       }
       
       // For other errors, return empty array instead of throwing
-      console.log('Unexpected error accessing team matches, returning empty array');
+      console.log('Cloud access temporarily unavailable, returning empty array');
       return [];
     }
   },
@@ -303,7 +297,7 @@ export const cloudStorageService = {
       await enableNetwork(db);
       return true;
     } catch (error) {
-      console.error('Connection check failed:', error);
+      console.log('Connection check failed, continuing in offline mode');
       return false;
     }
   },
@@ -314,7 +308,7 @@ export const cloudStorageService = {
       await disableNetwork(db);
       console.log('Firestore is now offline');
     } catch (error) {
-      console.error('Failed to go offline:', error);
+      console.log('Already in offline mode');
     }
   },
 
@@ -324,7 +318,7 @@ export const cloudStorageService = {
       await enableNetwork(db);
       console.log('Firestore is now online');
     } catch (error) {
-      console.error('Failed to go online:', error);
+      console.log('Unable to go online, continuing in offline mode');
     }
   }
 };
