@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_DZvjAAVWzf1RD9FXJXUBG-Tn0PiCFss",
@@ -14,11 +14,19 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with persistent cache
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
-});
+// Initialize Firestore with better error handling and offline support
+let db;
 
-export { db }; 
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
+} catch (error) {
+  console.warn('Failed to initialize Firestore with persistent cache, falling back to default:', error);
+  // Fallback to default Firestore initialization
+  db = getFirestore(app);
+}
+
+export { db };

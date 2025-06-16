@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Menu, BarChart3, RefreshCw, AlertCircle, Trophy, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, Menu, BarChart3, RefreshCw, AlertCircle, Trophy, UserPlus, X, Wifi, WifiOff } from 'lucide-react';
 import { Match, Ball, Player } from '../types/cricket';
 import { ScoreDisplay } from './ScoreDisplay';
 import { ScoringPanel } from './ScoringPanel';
@@ -58,10 +58,32 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const [retryCount, setRetryCount] = useState(0);
   const [addPlayerType, setAddPlayerType] = useState<'batting' | 'bowling'>('batting');
   const [extraRuns, setExtraRuns] = useState(0);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // Add new state for players
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [isLoadingPlayers, setIsLoadingPlayers] = useState(true);
+
+  // Monitor online/offline status
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      cloudStorageService.goOnline();
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      cloudStorageService.goOffline();
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Load players on mount
   useEffect(() => {
@@ -82,14 +104,16 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   useEffect(() => {
     const loadMatch = async () => {
       try {
-        const savedMatch = await cloudStorageService.getMatch(initialMatch.id);
-        if (savedMatch) {
-          setMatch(savedMatch);
-          // Initialize bowler history
-          const history = savedMatch.balls
-            .filter(b => b.bowler.id !== savedMatch.currentBowler?.id)
-            .map(b => b.bowler.id);
-          setBowlerHistory([...new Set(history)]);
+        if (isOnline) {
+          const savedMatch = await cloudStorageService.getMatch(initialMatch.id);
+          if (savedMatch) {
+            setMatch(savedMatch);
+            // Initialize bowler history
+            const history = savedMatch.balls
+              .filter(b => b.bowler.id !== savedMatch.currentBowler?.id)
+              .map(b => b.bowler.id);
+            setBowlerHistory([...new Set(history)]);
+          }
         }
       } catch (error) {
         console.error('Error loading match from cloud:', error);
@@ -97,11 +121,16 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       }
     };
     loadMatch();
-  }, [initialMatch.id]);
+  }, [initialMatch.id, isOnline]);
 
   // Save match to cloud storage whenever it changes
   useEffect(() => {
     const saveMatch = async () => {
+      if (!isOnline) {
+        setSaveError('Device is offline. Changes will sync when connection is restored.');
+        return;
+      }
+
       try {
         setIsSaving(true);
         setSaveError(null);
@@ -123,7 +152,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       }
     };
     saveMatch();
-  }, [match, retryCount]);
+  }, [match, retryCount, isOnline]);
 
   // Calculate remaining runs and balls
   useEffect(() => {
@@ -424,6 +453,11 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         <h1 className="font-bold text-base text-gray-900">Live Scorer</h1>
         
         <div className="flex items-center space-x-2">
+          {/* Connection Status */}
+          <div className={`p-1 rounded-lg ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
+            {isOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+          </div>
+          
           <button
             onClick={() => setShowScorecard(true)}
             className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
@@ -497,7 +531,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         
         {/* Live Stats Bars */}
         {match.currentStriker && match.currentNonStriker && match.currentBowler && (
-          <div className="space-y-2">
+          <div className="space-y-1">
             <LiveStatsBar 
               player={match.currentStriker} 
               balls={match.balls} 
@@ -777,10 +811,16 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         {saveError && (
           <div className="bg-red-100 text-red-800 px-4 py-2 rounded-lg shadow-md flex items-center space-x-2">
             <X className="w-4 h-4" />
-            <span>{saveError}</span>
+            <span className="text-sm">{saveError}</span>
             {retryCount > 0 && (
-              <span className="text-sm ml-2">(Retrying {retryCount}/3)</span>
+              <span className="text-xs ml-2">(Retrying {retryCount}/3)</span>
             )}
+          </div>
+        )}
+        {!isOnline && (
+          <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-lg shadow-md flex items-center space-x-2 mb-2">
+            <WifiOff className="w-4 h-4" />
+            <span className="text-sm">Offline Mode</span>
           </div>
         )}
       </div>
