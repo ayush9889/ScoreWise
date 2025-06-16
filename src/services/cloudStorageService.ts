@@ -20,6 +20,22 @@ const MATCHES_COLLECTION = 'matches';
 // Helper function to check if we're online
 const isOnline = () => navigator.onLine;
 
+// Helper function to check if error is permission-related
+const isPermissionError = (error: any): boolean => {
+  return error?.code === 'permission-denied' || 
+         error?.message?.includes('Missing or insufficient permissions') ||
+         error?.message?.includes('permission-denied');
+};
+
+// Helper function to check if error is network-related
+const isNetworkError = (error: any): boolean => {
+  return error?.code === 'unavailable' ||
+         error?.message?.includes('unavailable') || 
+         error?.message?.includes('network') ||
+         error?.message?.includes('offline') ||
+         error?.message?.includes('Failed to get document because the client is offline');
+};
+
 // Helper function to clean and prepare match data for Firestore
 const prepareMatchData = (match: Match) => {
   // Create a deep copy of the match object
@@ -90,12 +106,14 @@ export const cloudStorageService = {
     } catch (error) {
       console.error('Error saving match to cloud:', error);
       
+      // Handle permission errors gracefully
+      if (isPermissionError(error)) {
+        console.log('Permission denied - continuing in offline mode');
+        return;
+      }
+      
       // Don't throw error for connection issues - let the app work offline
-      if (error instanceof Error && (
-        error.message.includes('unavailable') || 
-        error.message.includes('network') ||
-        error.message.includes('offline')
-      )) {
+      if (isNetworkError(error)) {
         console.log('Network issue detected, continuing in offline mode');
         return;
       }
@@ -144,20 +162,21 @@ export const cloudStorageService = {
     } catch (error) {
       console.error('Error getting match from cloud:', error);
       
+      // Handle permission errors gracefully
+      if (isPermissionError(error)) {
+        console.log('Permission denied - unable to access cloud data. Please check Firebase security rules.');
+        return null;
+      }
+      
       // Don't throw error for connection issues
-      if (error instanceof Error && (
-        error.message.includes('unavailable') || 
-        error.message.includes('network') ||
-        error.message.includes('offline')
-      )) {
+      if (isNetworkError(error)) {
         console.log('Network issue detected, returning null');
         return null;
       }
       
-      if (error instanceof Error) {
-        throw new Error(`Failed to get match: ${error.message}`);
-      }
-      throw new Error('Failed to get match from cloud storage');
+      // For other errors, return null instead of throwing
+      console.log('Unexpected error accessing cloud storage, continuing with local data');
+      return null;
     }
   },
 
@@ -194,20 +213,21 @@ export const cloudStorageService = {
     } catch (error) {
       console.error('Error getting recent matches:', error);
       
+      // Handle permission errors gracefully
+      if (isPermissionError(error)) {
+        console.log('Permission denied - unable to access recent matches');
+        return [];
+      }
+      
       // Don't throw error for connection issues
-      if (error instanceof Error && (
-        error.message.includes('unavailable') || 
-        error.message.includes('network') ||
-        error.message.includes('offline')
-      )) {
+      if (isNetworkError(error)) {
         console.log('Network issue detected, returning empty array');
         return [];
       }
       
-      if (error instanceof Error) {
-        throw new Error(`Failed to get recent matches: ${error.message}`);
-      }
-      throw new Error('Failed to get recent matches from cloud storage');
+      // For other errors, return empty array instead of throwing
+      console.log('Unexpected error accessing recent matches, returning empty array');
+      return [];
     }
   },
 
@@ -253,20 +273,21 @@ export const cloudStorageService = {
     } catch (error) {
       console.error('Error getting team matches:', error);
       
+      // Handle permission errors gracefully
+      if (isPermissionError(error)) {
+        console.log('Permission denied - unable to access team matches');
+        return [];
+      }
+      
       // Don't throw error for connection issues
-      if (error instanceof Error && (
-        error.message.includes('unavailable') || 
-        error.message.includes('network') ||
-        error.message.includes('offline')
-      )) {
+      if (isNetworkError(error)) {
         console.log('Network issue detected, returning empty array');
         return [];
       }
       
-      if (error instanceof Error) {
-        throw new Error(`Failed to get team matches: ${error.message}`);
-      }
-      throw new Error('Failed to get team matches from cloud storage');
+      // For other errors, return empty array instead of throwing
+      console.log('Unexpected error accessing team matches, returning empty array');
+      return [];
     }
   },
 

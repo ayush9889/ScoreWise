@@ -117,7 +117,10 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         }
       } catch (error) {
         console.error('Error loading match from cloud:', error);
-        setSaveError('Failed to load match from cloud storage. Using local data.');
+        // Don't show error to user for permission issues - just continue with local data
+        if (error instanceof Error && !error.message.includes('permission')) {
+          setSaveError('Failed to load match from cloud storage. Using local data.');
+        }
       }
     };
     loadMatch();
@@ -138,9 +141,16 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         setRetryCount(0); // Reset retry count on successful save
       } catch (error) {
         console.error('Error saving match to cloud:', error);
+        
+        // Don't show permission errors to user - just log them
+        if (error instanceof Error && error.message.includes('permission')) {
+          console.log('Permission denied for cloud save - continuing in offline mode');
+          return;
+        }
+        
         setSaveError(error instanceof Error ? error.message : 'Failed to save match to cloud storage');
         
-        // Implement retry logic
+        // Implement retry logic for non-permission errors
         if (retryCount < 3) {
           setRetryCount(prev => prev + 1);
           setTimeout(() => {
