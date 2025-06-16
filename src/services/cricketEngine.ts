@@ -49,7 +49,7 @@ export class CricketEngine {
     return false;
   }
 
-  // Strict bowler validation - cannot bowl consecutive overs
+  // STRICT bowler validation - cannot bowl consecutive overs
   static canBowlerBowlNextOver(bowler: Player, match: Match): boolean {
     if (match.balls.length === 0) return true;
     
@@ -64,29 +64,45 @@ export class CricketEngine {
     
     const previousOverBowler = previousOverBalls[0]?.bowler;
     
-    // Bowler cannot bowl consecutive overs
+    // STRICT: Bowler cannot bowl consecutive overs
     return previousOverBowler?.id !== bowler.id;
   }
 
-  // Get available bowlers for next over (excluding previous over bowler)
+  // Get available bowlers for next over (STRICT filtering)
   static getAvailableBowlers(match: Match, nextOver: number): Player[] {
     const allBowlers = match.bowlingTeam.players;
     
-    if (nextOver <= 1) return allBowlers;
+    if (nextOver <= 1) {
+      // First over - exclude current batsmen
+      return allBowlers.filter(bowler => 
+        bowler.id !== match.currentStriker?.id &&
+        bowler.id !== match.currentNonStriker?.id
+      );
+    }
     
     const previousOver = nextOver - 1;
     const previousOverBalls = match.balls.filter(b => b.overNumber === previousOver);
     
-    if (previousOverBalls.length === 0) return allBowlers;
+    if (previousOverBalls.length === 0) {
+      return allBowlers.filter(bowler => 
+        bowler.id !== match.currentStriker?.id &&
+        bowler.id !== match.currentNonStriker?.id
+      );
+    }
     
     const previousBowlerId = previousOverBalls[0]?.bowler?.id;
     
-    // Filter out the previous over bowler and current batsmen
-    return allBowlers.filter(bowler => 
+    // STRICT: Filter out the previous over bowler and current batsmen
+    const availableBowlers = allBowlers.filter(bowler => 
       bowler.id !== previousBowlerId &&
       bowler.id !== match.currentStriker?.id &&
       bowler.id !== match.currentNonStriker?.id
     );
+
+    console.log(`Over ${nextOver}: Previous bowler was ${previousOverBalls[0]?.bowler?.name}, available bowlers:`, 
+      availableBowlers.map(b => b.name));
+    
+    return availableBowlers;
   }
 
   // Process ball and update match state with proper cricket rules
@@ -172,7 +188,7 @@ export class CricketEngine {
     return 'Match completed';
   }
 
-  // Calculate comprehensive player stats
+  // Calculate comprehensive player stats with enhanced tracking
   static updatePlayerStats(player: Player, match: Match): PlayerStats {
     const stats = { ...player.stats };
     stats.matchesPlayed++;
@@ -210,7 +226,7 @@ export class CricketEngine {
     if (runsScored >= 100) stats.hundreds++;
     if (runsScored > stats.highestScore) stats.highestScore = runsScored;
 
-    // Bowling stats
+    // Bowling stats with proper over calculation
     const bowlingBalls = match.balls.filter(b => b.bowler.id === player.id);
     let wicketsTaken = 0;
     let runsConceded = 0;
@@ -244,7 +260,7 @@ export class CricketEngine {
       }
     });
 
-    // Count maiden overs
+    // Count maiden overs (6 balls, 0 runs)
     bowlingOvers.forEach(overStat => {
       if (overStat.balls === 6 && overStat.runs === 0) {
         maidenOvers++;
@@ -259,7 +275,8 @@ export class CricketEngine {
     // Update best bowling figures
     if (wicketsTaken > 0) {
       const currentFigures = `${wicketsTaken}/${runsConceded}`;
-      if (!stats.bestBowlingFigures || this.compareBowlingFigures(currentFigures, stats.bestBowlingFigures)) {
+      if (!stats.bestBowlingFigures || stats.bestBowlingFigures === '0/0' || 
+          this.compareBowlingFigures(currentFigures, stats.bestBowlingFigures)) {
         stats.bestBowlingFigures = currentFigures;
       }
     }
@@ -273,6 +290,10 @@ export class CricketEngine {
       b.isWicket && b.wicketType === 'run_out' && b.fielder?.id === player.id
     ).length;
 
+    const stumpings = match.balls.filter(b => 
+      b.isWicket && b.wicketType === 'stumped' && b.fielder?.id === player.id
+    ).length;
+
     stats.catches += catches;
     stats.runOuts += runOuts;
 
@@ -280,6 +301,16 @@ export class CricketEngine {
     if (match.manOfTheMatch?.id === player.id) {
       stats.motmAwards++;
     }
+
+    console.log(`Updated stats for ${player.name}:`, {
+      runsScored,
+      ballsFaced,
+      wicketsTaken,
+      ballsBowled,
+      catches,
+      runOuts,
+      motmAwards: stats.motmAwards
+    });
 
     return stats;
   }
@@ -326,7 +357,9 @@ export class CricketEngine {
 
     allPlayers.forEach(player => {
       const performance = this.calculatePlayerPerformance(player, match);
-      performances.push(performance);
+      if (performance.totalScore > 0) { // Only consider players who participated
+        performances.push(performance);
+      }
     });
 
     // Sort by total performance score
@@ -335,7 +368,17 @@ export class CricketEngine {
     if (performances.length === 0) return null;
     
     const topPerformer = performances[0];
-    return allPlayers.find(p => p.id === topPerformer.playerId) || null;
+    const motmPlayer = allPlayers.find(p => p.id === topPerformer.playerId);
+    
+    console.log('MOTM Calculation:', {
+      topPerformer: motmPlayer?.name,
+      score: topPerformer.totalScore,
+      batting: topPerformer.battingScore,
+      bowling: topPerformer.bowlingScore,
+      fielding: topPerformer.fieldingScore
+    });
+    
+    return motmPlayer || null;
   }
 
   private static calculatePlayerPerformance(player: Player, match: Match): PlayerPerformance {
@@ -365,24 +408,31 @@ export class CricketEngine {
       }
     });
 
-    // Batting score calculation
+    // Enhanced batting score calculation
     if (ballsFaced > 0) {
       const strikeRate = (runsScored / ballsFaced) * 100;
       
+      // Base runs score
       battingScore += runsScored * 1.5;
       
+      // Strike rate bonus/penalty
       if (strikeRate >= 150) battingScore += runsScored * 0.4;
       else if (strikeRate >= 120) battingScore += runsScored * 0.2;
       else if (strikeRate < 80 && ballsFaced >= 10) battingScore -= runsScored * 0.1;
       
+      // Milestone bonuses
       if (runsScored >= 100) battingScore += 50;
       else if (runsScored >= 50) battingScore += 25;
       else if (runsScored >= 30) battingScore += 10;
       
+      // Boundary bonuses
       battingScore += fours * 2;
       battingScore += sixes * 4;
       
+      // Not out bonus for significant scores
       if (!gotOut && runsScored >= 20) battingScore += 10;
+      
+      // Duck penalty
       if (gotOut && runsScored === 0) battingScore -= 10;
     }
 
@@ -404,19 +454,24 @@ export class CricketEngine {
       runsConceded += ball.runs;
     });
 
+    // Enhanced bowling score calculation
     if (ballsBowled > 0) {
       const economyRate = (runsConceded / ballsBowled) * 6;
       const dotBallPercentage = (dotBalls / ballsBowled) * 100;
       
+      // Wicket points
       bowlingScore += wicketsTaken * 25;
       
+      // Economy rate bonus/penalty
       if (economyRate <= 4) bowlingScore += 20;
       else if (economyRate <= 6) bowlingScore += 10;
       else if (economyRate >= 10) bowlingScore -= 10;
       
+      // Dot ball bonus
       if (dotBallPercentage >= 60) bowlingScore += 15;
       else if (dotBallPercentage >= 40) bowlingScore += 8;
       
+      // Wicket milestone bonuses
       if (wicketsTaken >= 5) bowlingScore += 30;
       else if (wicketsTaken >= 3) bowlingScore += 15;
     }
@@ -430,8 +485,14 @@ export class CricketEngine {
       b.isWicket && b.wicketType === 'run_out' && b.fielder?.id === player.id
     ).length;
 
+    const stumpings = match.balls.filter(b => 
+      b.isWicket && b.wicketType === 'stumped' && b.fielder?.id === player.id
+    ).length;
+
+    // Enhanced fielding score calculation
     fieldingScore += catches * 8;
     fieldingScore += runOuts * 12;
+    fieldingScore += stumpings * 10;
 
     const totalScore = battingScore + bowlingScore + fieldingScore;
 

@@ -148,20 +148,45 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     }
   }, [match.battingTeam.score, match.battingTeam.overs, match.battingTeam.balls, match.isSecondInnings, match.firstInningsScore]);
 
-  // Update player stats after match completion
+  // Update player stats after match completion with enhanced tracking
   useEffect(() => {
     const updatePlayerStats = async () => {
       if (match.isCompleted) {
         try {
-          const allMatchPlayers = [...match.team1.players, ...match.team2.players];
+          console.log('Updating player stats after match completion...');
           
+          // Get all players who participated in the match
+          const allMatchPlayers = [...match.team1.players, ...match.team2.players];
+          console.log('Players to update:', allMatchPlayers.map(p => p.name));
+          
+          // Update stats for each player
           for (const player of allMatchPlayers) {
+            console.log(`Updating stats for ${player.name}...`);
+            
+            // Calculate updated stats using cricket engine
             const updatedStats = CricketEngine.updatePlayerStats(player, match);
-            const updatedPlayer = { ...player, stats: updatedStats };
+            
+            // Create updated player object
+            const updatedPlayer = { 
+              ...player, 
+              stats: updatedStats 
+            };
+            
+            // Save to storage
             await storageService.savePlayer(updatedPlayer);
+            console.log(`Stats updated for ${player.name}:`, {
+              matches: updatedStats.matchesPlayed,
+              runs: updatedStats.runsScored,
+              wickets: updatedStats.wicketsTaken,
+              motm: updatedStats.motmAwards
+            });
           }
           
-          console.log('Player stats updated successfully');
+          console.log('All player stats updated successfully');
+          
+          // Force refresh of dashboard data by triggering a storage event
+          window.dispatchEvent(new CustomEvent('playerStatsUpdated'));
+          
         } catch (error) {
           console.error('Failed to update player stats:', error);
         }
@@ -237,6 +262,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     const motm = CricketEngine.calculateManOfTheMatch(updatedMatch);
     if (motm) {
       updatedMatch.manOfTheMatch = motm;
+      console.log('Man of the Match:', motm.name);
     }
     
     setMatch(updatedMatch);
@@ -263,10 +289,15 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       setOverCompleteMessage(`Over ${updatedMatch.battingTeam.overs} completed!`);
       setNeedsBowlerChange(true);
       
-      // Get available bowlers for next over (strict rule: no consecutive overs)
-      const availableBowlers = CricketEngine.getAvailableBowlers(updatedMatch, updatedMatch.battingTeam.overs + 1);
+      // Get available bowlers for next over (STRICT rule: no consecutive overs)
+      const nextOver = updatedMatch.battingTeam.overs + 1;
+      const availableBowlers = CricketEngine.getAvailableBowlers(updatedMatch, nextOver);
+      
+      console.log(`Over ${updatedMatch.battingTeam.overs} completed. Available bowlers for over ${nextOver}:`, 
+        availableBowlers.map(b => b.name));
       
       if (availableBowlers.length === 0) {
+        alert('No eligible bowlers available for the next over! Please add more bowlers to the team.');
         setAddPlayerType('bowling');
         setShowAddPlayerModal(true);
       } else {
@@ -294,8 +325,18 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
 
   const handleBowlerChange = (newBowler: Player) => {
     const updatedMatch = { ...match };
+    
+    // STRICT: Validate that this bowler can bowl the next over
+    const nextOver = updatedMatch.battingTeam.overs + 1;
+    if (!CricketEngine.canBowlerBowlNextOver(newBowler, updatedMatch)) {
+      alert(`${newBowler.name} cannot bowl consecutive overs! Please select a different bowler.`);
+      return;
+    }
+    
     updatedMatch.previousBowler = updatedMatch.currentBowler;
     updatedMatch.currentBowler = newBowler;
+    
+    console.log(`Bowler changed to ${newBowler.name} for over ${nextOver}`);
     
     // Add bowler to bowling team if not already present
     if (!updatedMatch.bowlingTeam.players.find(p => p.id === newBowler.id)) {
@@ -372,8 +413,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   };
 
   const getAvailableBowlers = (): Player[] => {
-    const currentOver = match.battingTeam.overs + 1;
-    return CricketEngine.getAvailableBowlers(match, currentOver);
+    const nextOver = match.battingTeam.overs + 1;
+    return CricketEngine.getAvailableBowlers(match, nextOver);
   };
 
   const getAvailableBatsmen = (): Player[] => {
@@ -435,16 +476,18 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         </div>
       </div>
 
-      {/* Over Complete Message */}
+      {/* Over Complete Message with Bowler Change Required */}
       {overCompleteMessage && needsBowlerChange && (
-        <div className="bg-green-100 border-l-4 border-green-500 p-2 m-2">
+        <div className="bg-red-100 border-l-4 border-red-500 p-3 m-2">
           <div className="flex items-center">
-            <AlertCircle className="w-4 h-4 text-green-600 mr-1" />
-            <p className="text-green-700 text-sm font-semibold">{overCompleteMessage}</p>
+            <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+            <div>
+              <p className="text-red-700 text-sm font-semibold">{overCompleteMessage}</p>
+              <p className="text-red-600 text-xs mt-1">
+                <strong>MANDATORY:</strong> Select new bowler to continue. Same bowler cannot bowl consecutive overs.
+              </p>
+            </div>
           </div>
-          <p className="text-green-600 text-xs mt-1">
-            Strike rotated. Please select new bowler to continue.
-          </p>
         </div>
       )}
 
@@ -503,10 +546,10 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         />
       )}
 
-      {/* Bowler Selector Modal */}
+      {/* Bowler Selector Modal with STRICT filtering */}
       {showBowlerSelector && (
         <PlayerSelector
-          title="Select New Bowler"
+          title="Select New Bowler (Cannot Bowl Consecutive Overs)"
           onPlayerSelect={handleBowlerChange}
           onClose={() => {
             setShowBowlerSelector(false);
@@ -591,6 +634,12 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
               >
                 🏆
               </motion.div>
+              {match.manOfTheMatch && (
+                <div className="mt-4">
+                  <p className="text-lg font-semibold text-yellow-600">Man of the Match</p>
+                  <p className="text-xl font-bold text-gray-900">{match.manOfTheMatch.name}</p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
