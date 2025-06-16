@@ -1,6 +1,6 @@
 import React from 'react';
 import { Player, Ball } from '../types/cricket';
-import { TrendingUp, Target, Clock, Zap, User, Activity } from 'lucide-react';
+import { TrendingUp, Target, User, Zap } from 'lucide-react';
 
 interface LiveStatsBarProps {
   player: Player;
@@ -49,80 +49,74 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
     const stats = calculateBatsmanStats();
     
     return (
-      <div className={`glass-effect rounded-2xl p-5 border-l-4 shadow-lg transition-all duration-300 ${
+      <div className={`glass-effect rounded-xl p-3 border-l-4 shadow-sm transition-all duration-200 ${
         isStriker 
-          ? 'border-emerald-500 bg-gradient-to-r from-emerald-50/80 to-green-50/80' 
-          : 'border-blue-500 bg-gradient-to-r from-blue-50/80 to-indigo-50/80'
+          ? 'border-emerald-500 bg-emerald-50/50' 
+          : 'border-blue-500 bg-blue-50/50'
       }`}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mr-4 overflow-hidden shadow-sm">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center flex-1 min-w-0">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3 overflow-hidden flex-shrink-0">
               {player.photoUrl ? (
                 <img src={player.photoUrl} alt={player.name} className="w-full h-full object-cover" />
               ) : (
-                <User className="w-6 h-6 text-gray-600" />
+                <User className="w-4 h-4 text-gray-600" />
               )}
             </div>
-            <div>
-              <div className="font-bold text-gray-900 font-display text-lg">{player.name}</div>
-              {isStriker && (
-                <span className="inline-flex items-center px-3 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-full font-bold mt-1">
-                  <Zap className="w-3 h-3 mr-1" />
-                  ON STRIKE
-                </span>
-              )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center">
+                <div className="font-bold text-gray-900 text-sm truncate font-display">{player.name}</div>
+                {isStriker && (
+                  <div className="ml-2 flex items-center px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full font-bold">
+                    <Zap className="w-3 h-3 mr-1" />
+                    <span className="hidden sm:inline">ON STRIKE</span>
+                    <span className="sm:hidden">*</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-3xl font-black text-gray-900 font-display">{stats.runs}</div>
-            <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">runs</div>
+          
+          {/* Main Score */}
+          <div className="text-right ml-3">
+            <div className="text-xl font-black text-gray-900 font-display">{stats.runs}</div>
+            <div className="text-xs text-gray-500 font-medium">({stats.ballsFaced})</div>
           </div>
         </div>
         
-        {/* Stats Grid */}
-        <div className="grid grid-cols-5 gap-3 mb-4">
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-gray-800 text-lg">{stats.ballsFaced}</div>
-            <div className="text-xs text-gray-600 font-medium">balls</div>
-          </div>
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-green-600 text-lg">{stats.fours}</div>
-            <div className="text-xs text-gray-600 font-medium">4s</div>
-          </div>
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-blue-600 text-lg">{stats.sixes}</div>
-            <div className="text-xs text-gray-600 font-medium">6s</div>
-          </div>
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-red-600 text-lg">{stats.dotBalls}</div>
-            <div className="text-xs text-gray-600 font-medium">dots</div>
-          </div>
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-purple-600 text-lg">{stats.strikeRate}</div>
-            <div className="text-xs text-gray-600 font-medium">SR</div>
-          </div>
-        </div>
-
-        {/* Strike Rate Progress Bar */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
+        {/* Compact Stats Row */}
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+          <div className="flex items-center space-x-4 text-xs">
             <div className="flex items-center">
-              <TrendingUp className="w-4 h-4 text-gray-500 mr-2" />
-              <span className="text-sm font-medium text-gray-600">Strike Rate</span>
+              <span className="text-gray-500 mr-1">4s:</span>
+              <span className="font-bold text-green-600">{stats.fours}</span>
             </div>
-            <span className="text-sm font-bold text-gray-800">{stats.strikeRate}%</span>
+            <div className="flex items-center">
+              <span className="text-gray-500 mr-1">6s:</span>
+              <span className="font-bold text-blue-600">{stats.sixes}</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-gray-500 mr-1">Dots:</span>
+              <span className="font-bold text-red-600">{stats.dotBalls}</span>
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-            <div 
-              className={`h-3 rounded-full transition-all duration-700 ${
-                parseFloat(stats.strikeRate) >= 150 ? 'bg-gradient-to-r from-green-400 to-green-600' :
-                parseFloat(stats.strikeRate) >= 120 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
-                parseFloat(stats.strikeRate) >= 100 ? 'bg-gradient-to-r from-orange-400 to-orange-600' :
-                'bg-gradient-to-r from-red-400 to-red-600'
-              }`}
-              style={{ width: `${Math.min(parseFloat(stats.strikeRate), 200) / 2}%` }}
-            ></div>
+          
+          {/* Strike Rate with Mini Progress */}
+          <div className="flex items-center">
+            <TrendingUp className="w-3 h-3 text-gray-400 mr-1" />
+            <span className="text-xs font-bold text-gray-700">{stats.strikeRate}</span>
+            <div className="ml-2 w-8 h-1 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className={`h-1 rounded-full transition-all duration-300 ${
+                  parseFloat(stats.strikeRate) >= 150 ? 'bg-green-500' :
+                  parseFloat(stats.strikeRate) >= 120 ? 'bg-yellow-500' :
+                  parseFloat(stats.strikeRate) >= 100 ? 'bg-orange-500' :
+                  'bg-red-500'
+                }`}
+                style={{ width: `${Math.min(parseFloat(stats.strikeRate), 200) / 2.5}%` }}
+              ></div>
+            </div>
           </div>
         </div>
       </div>
@@ -131,74 +125,68 @@ export const LiveStatsBar: React.FC<LiveStatsBarProps> = ({
     const stats = calculateBowlerStats();
     
     return (
-      <div className="glass-effect rounded-2xl p-5 border-l-4 border-red-500 bg-gradient-to-r from-red-50/80 to-pink-50/80 shadow-lg transition-all duration-300">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mr-4 overflow-hidden shadow-sm">
+      <div className="glass-effect rounded-xl p-3 border-l-4 border-red-500 bg-red-50/50 shadow-sm transition-all duration-200">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center flex-1 min-w-0">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3 overflow-hidden flex-shrink-0">
               {player.photoUrl ? (
                 <img src={player.photoUrl} alt={player.name} className="w-full h-full object-cover" />
               ) : (
-                <User className="w-6 h-6 text-gray-600" />
+                <User className="w-4 h-4 text-gray-600" />
               )}
             </div>
-            <div>
-              <div className="font-bold text-gray-900 font-display text-lg">{player.name}</div>
-              <span className="inline-flex items-center px-3 py-1 bg-red-100 text-red-700 text-xs rounded-full font-bold mt-1">
-                <Target className="w-3 h-3 mr-1" />
-                BOWLING
-              </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center">
+                <div className="font-bold text-gray-900 text-sm truncate font-display">{player.name}</div>
+                <div className="ml-2 flex items-center px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-bold">
+                  <Target className="w-3 h-3 mr-1" />
+                  <span className="hidden sm:inline">BOWLING</span>
+                  <span className="sm:hidden">B</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-3xl font-black text-gray-900 font-display">{stats.overs}.{stats.remainingBalls}</div>
-            <div className="text-xs text-gray-500 font-medium uppercase tracking-wide">overs</div>
+          
+          {/* Main Stats */}
+          <div className="text-right ml-3">
+            <div className="text-xl font-black text-gray-900 font-display">{stats.overs}.{stats.remainingBalls}</div>
+            <div className="text-xs text-gray-500 font-medium">{stats.wickets}-{stats.runs}</div>
           </div>
         </div>
         
-        {/* Stats Grid */}
-        <div className="grid grid-cols-5 gap-3 mb-4">
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-red-600 text-lg">{stats.runs}</div>
-            <div className="text-xs text-gray-600 font-medium">runs</div>
-          </div>
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-green-600 text-lg">{stats.wickets}</div>
-            <div className="text-xs text-gray-600 font-medium">wickets</div>
-          </div>
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-blue-600 text-lg">{stats.dotBalls}</div>
-            <div className="text-xs text-gray-600 font-medium">dots</div>
-          </div>
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-purple-600 text-lg">{stats.economy}</div>
-            <div className="text-xs text-gray-600 font-medium">econ</div>
-          </div>
-          <div className="text-center bg-white/60 rounded-lg p-2">
-            <div className="font-bold text-orange-600 text-lg">{stats.ballsBowled}</div>
-            <div className="text-xs text-gray-600 font-medium">balls</div>
-          </div>
-        </div>
-
-        {/* Economy Rate Progress Bar */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
+        {/* Compact Stats Row */}
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+          <div className="flex items-center space-x-4 text-xs">
             <div className="flex items-center">
-              <Activity className="w-4 h-4 text-gray-500 mr-2" />
-              <span className="text-sm font-medium text-gray-600">Economy Rate</span>
+              <span className="text-gray-500 mr-1">Runs:</span>
+              <span className="font-bold text-red-600">{stats.runs}</span>
             </div>
-            <span className="text-sm font-bold text-gray-800">{stats.economy}</span>
+            <div className="flex items-center">
+              <span className="text-gray-500 mr-1">Wkts:</span>
+              <span className="font-bold text-green-600">{stats.wickets}</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-gray-500 mr-1">Dots:</span>
+              <span className="font-bold text-blue-600">{stats.dotBalls}</span>
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-            <div 
-              className={`h-3 rounded-full transition-all duration-700 ${
-                parseFloat(stats.economy) <= 4 ? 'bg-gradient-to-r from-green-400 to-green-600' :
-                parseFloat(stats.economy) <= 6 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
-                parseFloat(stats.economy) <= 8 ? 'bg-gradient-to-r from-orange-400 to-orange-600' :
-                'bg-gradient-to-r from-red-400 to-red-600'
-              }`}
-              style={{ width: `${Math.min(parseFloat(stats.economy) * 8, 100)}%` }}
-            ></div>
+          
+          {/* Economy Rate with Mini Progress */}
+          <div className="flex items-center">
+            <Target className="w-3 h-3 text-gray-400 mr-1" />
+            <span className="text-xs font-bold text-gray-700">{stats.economy}</span>
+            <div className="ml-2 w-8 h-1 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className={`h-1 rounded-full transition-all duration-300 ${
+                  parseFloat(stats.economy) <= 4 ? 'bg-green-500' :
+                  parseFloat(stats.economy) <= 6 ? 'bg-yellow-500' :
+                  parseFloat(stats.economy) <= 8 ? 'bg-orange-500' :
+                  'bg-red-500'
+                }`}
+                style={{ width: `${Math.min(parseFloat(stats.economy) * 10, 100)}%` }}
+              ></div>
+            </div>
           </div>
         </div>
       </div>
