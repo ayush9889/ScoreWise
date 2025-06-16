@@ -4,6 +4,8 @@ import { Match, Ball, Player } from '../types/cricket';
 import { ScoreDisplay } from './ScoreDisplay';
 import { ScoringPanel } from './ScoringPanel';
 import { PlayerSelector } from './PlayerSelector';
+import { LiveStatsBar } from './LiveStatsBar';
+import { InningsBreakModal } from './InningsBreakModal';
 import { CricketEngine } from '../services/cricketEngine';
 import { storageService } from '../services/storage';
 import { LiveScoreboard } from './LiveScoreboard';
@@ -37,7 +39,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
   const [showBatsmanSelector, setShowBatsmanSelector] = useState(false);
   const [showBowlerSelector, setShowBowlerSelector] = useState(false);
   const [showNewBatsmanSelector, setShowNewBatsmanSelector] = useState(false);
-  const [showInningsTransition, setShowInningsTransition] = useState(false);
+  const [showInningsBreak, setShowInningsBreak] = useState(false);
   const [showInningsSetup, setShowInningsSetup] = useState(false);
   const [showMatchSummary, setShowMatchSummary] = useState(false);
   const [showVictoryAnimation, setShowVictoryAnimation] = useState(false);
@@ -133,28 +135,54 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
     }
   }, [match.battingTeam.score, match.battingTeam.overs, match.battingTeam.balls, target]);
 
+  // Update player stats after match completion
+  useEffect(() => {
+    const updatePlayerStats = async () => {
+      if (match.isCompleted) {
+        try {
+          // Update stats for all players who participated
+          const allMatchPlayers = [...match.team1.players, ...match.team2.players];
+          
+          for (const player of allMatchPlayers) {
+            const updatedStats = CricketEngine.updatePlayerStats(player, match);
+            const updatedPlayer = { ...player, stats: updatedStats };
+            await storageService.savePlayer(updatedPlayer);
+          }
+          
+          console.log('Player stats updated successfully');
+        } catch (error) {
+          console.error('Failed to update player stats:', error);
+        }
+      }
+    };
+
+    updatePlayerStats();
+  }, [match.isCompleted]);
+
   const handleInningsTransition = () => {
-    setShowInningsTransition(true);
-    setTimeout(() => {
-      const updatedMatch = { ...match };
-      updatedMatch.isSecondInnings = true;
-      updatedMatch.battingTeam = match.bowlingTeam;
-      updatedMatch.bowlingTeam = match.battingTeam;
-      updatedMatch.firstInningsScore = match.battingTeam.score;
-      setTarget(match.battingTeam.score + 1);
-      updatedMatch.battingTeam.score = 0;
-      updatedMatch.battingTeam.overs = 0;
-      updatedMatch.battingTeam.balls = 0;
-      updatedMatch.battingTeam.extras = { wides: 0, noBalls: 0, byes: 0, legByes: 0 };
-      // Clear current players for new selection
-      updatedMatch.currentStriker = undefined;
-      updatedMatch.currentNonStriker = undefined;
-      updatedMatch.currentBowler = undefined;
-      setMatch(updatedMatch);
-      setShowInningsTransition(false);
-      setShowInningsSetup(true);
-      setIsSecondInningsSetup(true);
-    }, 2000);
+    setShowInningsBreak(true);
+  };
+
+  const handleInningsBreakContinue = () => {
+    const updatedMatch = { ...match };
+    updatedMatch.isSecondInnings = true;
+    updatedMatch.battingTeam = match.bowlingTeam;
+    updatedMatch.bowlingTeam = match.battingTeam;
+    updatedMatch.firstInningsScore = match.battingTeam.score;
+    setTarget(match.battingTeam.score + 1);
+    updatedMatch.battingTeam.score = 0;
+    updatedMatch.battingTeam.overs = 0;
+    updatedMatch.battingTeam.balls = 0;
+    updatedMatch.battingTeam.wickets = 0;
+    updatedMatch.battingTeam.extras = { wides: 0, noBalls: 0, byes: 0, legByes: 0 };
+    // Clear current players for new selection
+    updatedMatch.currentStriker = undefined;
+    updatedMatch.currentNonStriker = undefined;
+    updatedMatch.currentBowler = undefined;
+    setMatch(updatedMatch);
+    setShowInningsBreak(false);
+    setShowInningsSetup(true);
+    setIsSecondInningsSetup(true);
   };
 
   const handleInningsSetup = () => {
@@ -222,6 +250,11 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       updatedMatch.battingTeam.score += ball.runs;
     }
 
+    // Handle wickets
+    if (ball.isWicket) {
+      updatedMatch.battingTeam.wickets++;
+    }
+
     // Check if over is complete
     if (!ball.isWide && !ball.isNoBall) {
       updatedMatch.battingTeam.balls++;
@@ -240,8 +273,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
         const eligibleBowlers = availableBowlers.filter(b => !currentBatsmen.includes(b.id));
         
         if (eligibleBowlers.length > 0) {
-        setShowBowlerSelector(true);
-      } else {
+          setShowBowlerSelector(true);
+        } else {
           const shouldAddBowler = window.confirm(
             'No other bowlers available for the next over! Would you like to add more bowlers to the team?'
           );
@@ -258,7 +291,8 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       if (!updatedMatch.isSecondInnings) {
         handleInningsTransition();
       } else {
-        updatedMatch.isComplete = true;
+        updatedMatch.isCompleted = true;
+        updatedMatch.winner = CricketEngine.getMatchResult(updatedMatch);
         handleMatchComplete();
       }
     }
@@ -397,12 +431,12 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           >
             <Trophy className="w-5 h-5 text-gray-600" />
           </button>
-        <button
-          onClick={() => setShowMenu(!showMenu)}
+          <button
+            onClick={() => setShowMenu(!showMenu)}
             className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-        >
+          >
             <Menu className="w-5 h-5 text-gray-600" />
-        </button>
+          </button>
         </div>
       </div>
 
@@ -461,14 +495,27 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           </div>
         )}
         
-        {/* Live Scoreboard */}
-        {match.battingTeam.players.length > 1 && match.bowlingTeam.players.length > 0 && (
-          <LiveScoreboard
-            striker={match.battingTeam.players[0]}
-            nonStriker={match.battingTeam.players[1]}
-            bowler={match.bowlingTeam.players[0]}
-            balls={match.balls}
-          />
+        {/* Live Stats Bars */}
+        {match.currentStriker && match.currentNonStriker && match.currentBowler && (
+          <div className="space-y-2">
+            <LiveStatsBar 
+              player={match.currentStriker} 
+              balls={match.balls} 
+              type="batsman" 
+              isStriker={true}
+            />
+            <LiveStatsBar 
+              player={match.currentNonStriker} 
+              balls={match.balls} 
+              type="batsman" 
+              isStriker={false}
+            />
+            <LiveStatsBar 
+              player={match.currentBowler} 
+              balls={match.balls} 
+              type="bowler"
+            />
+          </div>
         )}
         
         <ScoringPanel
@@ -500,6 +547,16 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Innings Break Modal */}
+      <AnimatePresence>
+        {showInningsBreak && (
+          <InningsBreakModal
+            match={match}
+            onContinue={handleInningsBreakContinue}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Bowler Selector Modal */}
       {showBowlerSelector && (
@@ -551,7 +608,7 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
                 <X size={24} />
               </button>
             </div>
-            <Scorecard match={match} />
+            <ScorecardModal match={match} onClose={() => setShowScorecard(false)} />
           </div>
         </motion.div>
       )}
@@ -582,20 +639,6 @@ export const LiveScorer: React.FC<LiveScorerProps> = ({
       )}
 
       <AnimatePresence>
-        {showInningsTransition && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          >
-            <div className="bg-white rounded-lg p-8 text-center">
-              <h2 className="text-2xl font-bold mb-4">Innings Break</h2>
-              <p className="text-gray-600">First innings completed. Switching to second innings...</p>
-            </div>
-          </motion.div>
-        )}
-
         {showInningsSetup && (
           <motion.div
             initial={{ opacity: 0 }}

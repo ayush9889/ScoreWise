@@ -276,24 +276,24 @@ export class CricketEngine {
     return false;
   }
 
-  static calculateBattingAverage(stats: PlayerStats): number {
-    if (stats.timesOut === 0) return stats.runsScored;
-    return Number((stats.runsScored / stats.timesOut).toFixed(2));
+  static calculateBattingAverage(stats: PlayerStats): string {
+    if (stats.timesOut === 0) return stats.runsScored.toString();
+    return (stats.runsScored / stats.timesOut).toFixed(2);
   }
 
-  static calculateStrikeRate(stats: PlayerStats): number {
-    if (stats.ballsFaced === 0) return 0;
-    return Number(((stats.runsScored / stats.ballsFaced) * 100).toFixed(2));
+  static calculateStrikeRate(stats: PlayerStats): string {
+    if (stats.ballsFaced === 0) return '0.00';
+    return ((stats.runsScored / stats.ballsFaced) * 100).toFixed(2);
   }
 
-  static calculateBowlingAverage(stats: PlayerStats): number {
-    if (stats.wicketsTaken === 0) return 0;
-    return Number((stats.runsConceded / stats.wicketsTaken).toFixed(2));
+  static calculateBowlingAverage(stats: PlayerStats): string {
+    if (stats.wicketsTaken === 0) return '0.00';
+    return (stats.runsConceded / stats.wicketsTaken).toFixed(2);
   }
 
-  static calculateEconomyRate(stats: PlayerStats): number {
-    if (stats.ballsBowled === 0) return 0;
-    return Number(((stats.runsConceded / stats.ballsBowled) * 6).toFixed(2));
+  static calculateEconomyRate(stats: PlayerStats): string {
+    if (stats.ballsBowled === 0) return '0.00';
+    return ((stats.runsConceded / stats.ballsBowled) * 6).toFixed(2);
   }
 
   static isOverComplete(balls: Ball[], currentOver: number): boolean {
@@ -373,9 +373,8 @@ export class CricketEngine {
       return true;
     }
     
-    // Check if all wickets are lost
-    const wicketsLost = match.balls.filter(ball => ball.isWicket).length;
-    if (wicketsLost >= match.wicketsPerInnings) {
+    // Check if all wickets are lost (assuming 10 wickets max)
+    if (battingTeam.wickets >= 10) {
       return true;
     }
     
@@ -388,7 +387,7 @@ export class CricketEngine {
   }
 
   static getMatchResult(match: Match): string {
-    if (!match.isComplete) {
+    if (!match.isCompleted) {
       return 'Match in progress';
     }
 
@@ -397,9 +396,11 @@ export class CricketEngine {
       const bowlingTeam = match.bowlingTeam;
       
       if (battingTeam.score > match.firstInningsScore) {
-        return `${battingTeam.name} won by ${match.wicketsPerInnings - match.balls.filter(b => b.isWicket).length} wickets`;
+        const wicketsRemaining = 10 - battingTeam.wickets;
+        return `${battingTeam.name} won by ${wicketsRemaining} wickets`;
       } else if (battingTeam.score < match.firstInningsScore) {
-        return `${bowlingTeam.name} won by ${match.firstInningsScore - battingTeam.score} runs`;
+        const runsMargin = match.firstInningsScore - battingTeam.score;
+        return `${bowlingTeam.name} won by ${runsMargin} runs`;
       } else {
         return 'Match tied';
       }
