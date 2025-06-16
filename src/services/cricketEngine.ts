@@ -1,6 +1,55 @@
 import { Match, Player, Ball, Team, WicketType, PlayerStats, PlayerPerformance } from '../types/cricket';
 
 export class CricketEngine {
+  // STRICT match format enforcement - EXACTLY n overs, no more, no less
+  static isInningsComplete(match: Match): boolean {
+    const battingTeam = match.battingTeam;
+    
+    console.log(`🏏 CHECKING INNINGS COMPLETION:`);
+    console.log(`Current: ${battingTeam.overs}.${battingTeam.balls} / ${match.totalOvers} overs`);
+    console.log(`Wickets: ${battingTeam.wickets}/10`);
+    
+    // CRITICAL: EXACTLY the specified number of overs must be completed
+    if (battingTeam.overs >= match.totalOvers) {
+      console.log(`✅ INNINGS COMPLETE: All ${match.totalOvers} overs bowled`);
+      return true;
+    }
+    
+    // All wickets lost (10 wickets max)
+    if (battingTeam.wickets >= 10) {
+      console.log(`✅ INNINGS COMPLETE: All wickets lost`);
+      return true;
+    }
+    
+    // Target reached in second innings
+    if (match.isSecondInnings && match.firstInningsScore && 
+        battingTeam.score > match.firstInningsScore) {
+      console.log(`✅ INNINGS COMPLETE: Target reached`);
+      return true;
+    }
+    
+    console.log(`⏳ INNINGS CONTINUES: ${match.totalOvers - battingTeam.overs} overs remaining`);
+    return false;
+  }
+
+  // STRICT over completion - EXACTLY 6 valid balls
+  static isOverComplete(match: Match): boolean {
+    const currentOver = match.battingTeam.overs + 1;
+    const validBalls = match.balls.filter(b => 
+      b.overNumber === currentOver && 
+      !b.isWide && 
+      !b.isNoBall
+    );
+    
+    const isComplete = validBalls.length >= 6;
+    
+    if (isComplete) {
+      console.log(`🏏 OVER ${currentOver} COMPLETED: 6 valid balls bowled`);
+    }
+    
+    return isComplete;
+  }
+
   // Strike rotation logic based on real cricket rules
   static shouldRotateStrike(ball: Ball, isOverComplete: boolean): boolean {
     // Don't rotate on wides or no-balls (unless runs are taken)
@@ -13,40 +62,6 @@ export class CricketEngine {
     
     // Always rotate at end of over (even if no runs scored)
     return shouldRotateOnRuns || isOverComplete;
-  }
-
-  // Check if over is complete - STRICT 6 ball rule
-  static isOverComplete(match: Match): boolean {
-    const currentOver = match.battingTeam.overs + 1;
-    const validBalls = match.balls.filter(b => 
-      b.overNumber === currentOver && 
-      !b.isWide && 
-      !b.isNoBall
-    );
-    return validBalls.length >= 6;
-  }
-
-  // STRICT innings completion - only after specified overs
-  static isInningsComplete(match: Match): boolean {
-    const battingTeam = match.battingTeam;
-    
-    // STRICT: All overs completed (this is the primary condition)
-    if (battingTeam.overs >= match.totalOvers) {
-      return true;
-    }
-    
-    // All wickets lost (assuming 10 wickets max)
-    if (battingTeam.wickets >= 10) {
-      return true;
-    }
-    
-    // Target reached in second innings
-    if (match.isSecondInnings && match.firstInningsScore && 
-        battingTeam.score > match.firstInningsScore) {
-      return true;
-    }
-    
-    return false;
   }
 
   // ABSOLUTE STRICT bowler validation - ZERO tolerance for consecutive overs

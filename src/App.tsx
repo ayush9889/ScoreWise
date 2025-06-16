@@ -4,14 +4,15 @@ import { LiveScorer } from './components/LiveScorer';
 import { Dashboard } from './components/Dashboard';
 import { AuthModal } from './components/AuthModal';
 import { GroupManagement } from './components/GroupManagement';
+import { AdminDashboard } from './components/AdminDashboard';
 import { AddPlayerModal } from './components/AddPlayerModal';
 import { Match, Player } from './types/cricket';
 import { User, Group } from './types/auth';
 import { storageService } from './services/storage';
 import { authService } from './services/authService';
-import { Trophy, BarChart3, Play, Award, Users, UserPlus, LogIn, LogOut } from 'lucide-react';
+import { Trophy, BarChart3, Play, Award, Users, UserPlus, LogIn, LogOut, Crown } from 'lucide-react';
 
-type AppState = 'home' | 'auth' | 'group-management' | 'match-setup' | 'live-scoring' | 'dashboard' | 'match-complete';
+type AppState = 'home' | 'auth' | 'group-management' | 'admin-dashboard' | 'match-setup' | 'live-scoring' | 'dashboard' | 'match-complete';
 
 function App() {
   const [currentState, setCurrentState] = useState<AppState>('home');
@@ -35,6 +36,7 @@ function App() {
       const user = authService.getCurrentUser();
       if (user) {
         setCurrentUser(user);
+        await authService.loadUserGroups();
         const group = authService.getCurrentGroup();
         if (group) {
           setCurrentGroup(group);
@@ -48,8 +50,9 @@ function App() {
     }
   };
 
-  const handleAuthSuccess = () => {
+  const handleAuthSuccess = async () => {
     const user = authService.getCurrentUser();
+    await authService.loadUserGroups();
     const group = authService.getCurrentGroup();
     setCurrentUser(user);
     setCurrentGroup(group);
@@ -116,6 +119,15 @@ function App() {
               
               {currentUser ? (
                 <div className="flex items-center space-x-2">
+                  {/* Admin Dashboard Button */}
+                  <button
+                    onClick={() => setCurrentState('admin-dashboard')}
+                    className="p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-all"
+                    title="Admin Dashboard"
+                  >
+                    <Crown className="w-5 h-5 text-yellow-600" />
+                  </button>
+                  
                   <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
                     {currentUser.photoUrl ? (
                       <img src={currentUser.photoUrl} alt={currentUser.name} className="w-full h-full object-cover rounded-full" />
@@ -209,20 +221,37 @@ function App() {
             </button>
 
             {currentUser && (
-              <button
-                onClick={() => setCurrentState('group-management')}
-                className="w-full bg-white rounded-2xl shadow-lg p-6 text-left hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-purple-200"
-              >
-                <div className="flex items-center">
-                  <div className="bg-purple-100 w-12 h-12 rounded-full flex items-center justify-center mr-4">
-                    <Users className="w-6 h-6 text-purple-600" />
+              <>
+                <button
+                  onClick={() => setCurrentState('admin-dashboard')}
+                  className="w-full bg-white rounded-2xl shadow-lg p-6 text-left hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-yellow-200"
+                >
+                  <div className="flex items-center">
+                    <div className="bg-yellow-100 w-12 h-12 rounded-full flex items-center justify-center mr-4">
+                      <Crown className="w-6 h-6 text-yellow-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold text-gray-900 mb-1">Admin Dashboard</h3>
+                      <p className="text-gray-600">Manage groups & view personal stats</p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-1">Manage Group</h3>
-                    <p className="text-gray-600">Create or join cricket groups</p>
+                </button>
+
+                <button
+                  onClick={() => setCurrentState('group-management')}
+                  className="w-full bg-white rounded-2xl shadow-lg p-6 text-left hover:shadow-xl transition-all duration-200 border-2 border-transparent hover:border-purple-200"
+                >
+                  <div className="flex items-center">
+                    <div className="bg-purple-100 w-12 h-12 rounded-full flex items-center justify-center mr-4">
+                      <Users className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold text-gray-900 mb-1">Manage Group</h3>
+                      <p className="text-gray-600">Create or join cricket groups</p>
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+              </>
             )}
 
             {!currentUser && (
@@ -258,8 +287,8 @@ function App() {
                 <div className="bg-green-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Trophy className="w-6 h-6 text-green-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Zero Setup</h3>
-                <p className="text-gray-600 text-sm">Just team names and toss - start scoring instantly</p>
+                <h3 className="font-semibold text-gray-900 mb-2">STRICT Match Format</h3>
+                <p className="text-gray-600 text-sm">Exactly N overs - no more, no less. Perfect format enforcement</p>
               </div>
 
               <div className="bg-white rounded-xl p-6 shadow-sm text-center">
@@ -267,15 +296,15 @@ function App() {
                   <BarChart3 className="w-6 h-6 text-blue-600" />
                 </div>
                 <h3 className="font-semibold text-gray-900 mb-2">Smart Stats</h3>
-                <p className="text-gray-600 text-sm">Automatic player tracking and leaderboards</p>
+                <p className="text-gray-600 text-sm">Automatic player tracking and personalized dashboards</p>
               </div>
 
               <div className="bg-white rounded-xl p-6 shadow-sm text-center">
                 <div className="bg-orange-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Award className="w-6 h-6 text-orange-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-2">Group Features</h3>
-                <p className="text-gray-600 text-sm">Create groups, invite members, share stats</p>
+                <h3 className="font-semibold text-gray-900 mb-2">Member Management</h3>
+                <p className="text-gray-600 text-sm">Email/phone invites, guest links, admin controls</p>
               </div>
             </div>
           </div>
@@ -305,6 +334,10 @@ function App() {
         />
       </div>
     );
+  }
+
+  if (currentState === 'admin-dashboard') {
+    return <AdminDashboard onBack={handleBackToHome} />;
   }
 
   if (currentState === 'group-management') {

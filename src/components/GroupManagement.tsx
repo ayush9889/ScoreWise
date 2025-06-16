@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Share2, Settings, Crown, UserPlus, Copy, Check, Phone, Mail } from 'lucide-react';
+import { Users, Plus, Share2, Settings, Crown, UserPlus, Copy, Check, Phone, Mail, Link, Eye } from 'lucide-react';
 import { Group, User } from '../types/auth';
 import { Player } from '../types/cricket';
 import { authService } from '../services/authService';
@@ -22,6 +22,7 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
   const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddEmail, setQuickAddEmail] = useState('');
   const [quickAddPhone, setQuickAddPhone] = useState('');
   const [guestLink, setGuestLink] = useState('');
   const [copied, setCopied] = useState(false);
@@ -112,11 +113,12 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
     setError('');
 
     try {
-      // Create player
+      // Create player with enhanced member information
       const player: Player = {
         id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: quickAddName.trim(),
         isGroupMember: true,
+        groupIds: [currentGroup.id],
         stats: {
           matchesPlayed: 0,
           runsScored: 0,
@@ -142,10 +144,14 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
 
       await storageService.savePlayer(player);
 
-      // Send invitation if phone number provided
-      if (quickAddPhone.trim()) {
+      // Send invitation if contact info provided
+      if (quickAddEmail.trim() || quickAddPhone.trim()) {
         try {
-          await authService.inviteToGroup(currentGroup.id, undefined, quickAddPhone.trim());
+          await authService.inviteToGroup(
+            currentGroup.id, 
+            quickAddEmail.trim() || undefined, 
+            quickAddPhone.trim() || undefined
+          );
         } catch (inviteError) {
           console.warn('Failed to send invitation:', inviteError);
         }
@@ -153,8 +159,11 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
 
       setShowQuickAddModal(false);
       setQuickAddName('');
+      setQuickAddEmail('');
       setQuickAddPhone('');
-      alert(`Player "${player.name}" added successfully!${quickAddPhone ? ' Invitation sent via SMS.' : ''}`);
+      
+      const contactMethod = quickAddEmail ? 'email' : quickAddPhone ? 'SMS' : 'manually';
+      alert(`Player "${player.name}" added successfully!${quickAddEmail || quickAddPhone ? ` Invitation sent via ${contactMethod}.` : ''}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add player');
     } finally {
@@ -248,18 +257,18 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
               </div>
             </div>
 
-            {/* Quick Actions */}
+            {/* Enhanced Quick Actions */}
             {canManageGroup && (
               <div className="bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Member Management</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
                     onClick={() => setShowQuickAddModal(true)}
                     className="p-4 border-2 border-green-200 rounded-lg hover:bg-green-50 transition-colors"
                   >
                     <UserPlus className="w-6 h-6 text-green-600 mx-auto mb-2" />
-                    <div className="text-sm font-medium text-green-700">Quick Add Player</div>
-                    <div className="text-xs text-green-600">Add by phone number</div>
+                    <div className="text-sm font-medium text-green-700">Quick Add Member</div>
+                    <div className="text-xs text-green-600">Add player with email/phone</div>
                   </button>
 
                   <button
@@ -272,23 +281,38 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                   </button>
                 </div>
 
-                <button
-                  onClick={() => copyToClipboard(guestLink)}
-                  className="w-full mt-4 p-4 border-2 border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
-                >
-                  <Share2 className="w-6 h-6 text-purple-600 mx-auto mb-2" />
-                  <div className="text-sm font-medium text-purple-700">Share Guest Link</div>
-                  <div className="text-xs text-purple-600">View-only access for non-members</div>
-                </button>
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    onClick={() => copyToClipboard(currentGroup.inviteCode)}
+                    className="p-4 border-2 border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
+                  >
+                    <Copy className="w-6 h-6 text-purple-600 mx-auto mb-2" />
+                    <div className="text-sm font-medium text-purple-700">Copy Invite Code</div>
+                    <div className="text-xs text-purple-600">Share with new members</div>
+                  </button>
+
+                  <button
+                    onClick={() => copyToClipboard(guestLink)}
+                    className="p-4 border-2 border-orange-200 rounded-lg hover:bg-orange-50 transition-colors"
+                  >
+                    <Eye className="w-6 h-6 text-orange-600 mx-auto mb-2" />
+                    <div className="text-sm font-medium text-orange-700">Guest View Link</div>
+                    <div className="text-xs text-orange-600">View-only access</div>
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* Members List */}
+            {/* Enhanced Members List */}
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Members</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Members ({members.length})
+              </h3>
               <div className="space-y-3">
                 {members.map((member) => {
                   const memberInfo = currentGroup.members.find(m => m.userId === member.id);
+                  const isCurrentUser = member.id === currentUser?.id;
+                  
                   return (
                     <div key={member.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                       <div className="flex items-center">
@@ -302,13 +326,23 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                           )}
                         </div>
                         <div>
-                          <div className="font-medium text-gray-900">{member.name}</div>
+                          <div className="flex items-center space-x-2">
+                            <div className="font-medium text-gray-900">{member.name}</div>
+                            {isCurrentUser && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                                You
+                              </span>
+                            )}
+                          </div>
                           <div className="text-sm text-gray-500">{member.email}</div>
+                          {member.phone && (
+                            <div className="text-xs text-gray-400">{member.phone}</div>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center space-x-2">
                         {memberInfo?.role === 'admin' && (
-                          <Crown className="w-4 h-4 text-yellow-500 mr-2" />
+                          <Crown className="w-4 h-4 text-yellow-500" />
                         )}
                         <span className="text-sm text-gray-600 capitalize">{memberInfo?.role}</span>
                       </div>
@@ -318,7 +352,7 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
               </div>
             </div>
 
-            {/* Invite Code & Guest Link */}
+            {/* Enhanced Sharing Section */}
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Share & Invite</h3>
               
@@ -332,7 +366,7 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                       type="text"
                       value={currentGroup.inviteCode}
                       readOnly
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono"
                     />
                     <button
                       onClick={() => copyToClipboard(currentGroup.inviteCode)}
@@ -341,11 +375,14 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     </button>
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Share this code with new members to join the group
+                  </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Guest Link (View Only)
+                    Guest View Link (Read-Only Access)
                   </label>
                   <div className="flex items-center space-x-2">
                     <input
@@ -358,9 +395,12 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                       onClick={() => copyToClipboard(guestLink)}
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                     >
-                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {copied ? <Check className="w-4 h-4" /> : <Link className="w-4 h-4" />}
                     </button>
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Anyone with this link can view group stats without signing up
+                  </p>
                 </div>
               </div>
             </div>
@@ -452,7 +492,7 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                   type="text"
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono"
                   placeholder="Enter 6-character invite code"
                   maxLength={6}
                   required
@@ -551,13 +591,13 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
         </div>
       )}
 
-      {/* Quick Add Player Modal */}
+      {/* Enhanced Quick Add Player Modal */}
       {showQuickAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-md">
             <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Quick Add Player</h2>
-              <p className="text-sm text-gray-600 mt-1">Add a player and optionally invite them via SMS</p>
+              <h2 className="text-xl font-bold text-gray-900">Quick Add Member</h2>
+              <p className="text-sm text-gray-600 mt-1">Add a player and optionally invite them to join</p>
             </div>
             <form onSubmit={handleQuickAddPlayer} className="p-6 space-y-4">
               {error && (
@@ -582,6 +622,22 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address (Optional)
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="email"
+                    value={quickAddEmail}
+                    onChange={(e) => setQuickAddEmail(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter email for invitation"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Phone Number (Optional)
                 </label>
                 <div className="relative">
@@ -591,11 +647,14 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                     value={quickAddPhone}
                     onChange={(e) => setQuickAddPhone(e.target.value)}
                     className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="Enter phone number for invitation"
+                    placeholder="Enter phone for invitation"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  If provided, we'll send them an invitation to join the group
+              </div>
+
+              <div className="bg-blue-50 rounded-lg p-3">
+                <p className="text-xs text-blue-700">
+                  💡 <strong>Tip:</strong> If you provide email or phone, we'll send them an invitation to join the group with their own account. They can then see their personalized dashboard when they sign up with the same contact info.
                 </p>
               </div>
 
@@ -612,7 +671,7 @@ export const GroupManagement: React.FC<GroupManagementProps> = ({ onBack }) => {
                   disabled={loading || !quickAddName.trim()}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Adding...' : 'Add Player'}
+                  {loading ? 'Adding...' : 'Add Member'}
                 </button>
               </div>
             </form>
